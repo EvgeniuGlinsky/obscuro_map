@@ -1,55 +1,47 @@
 import 'package:flutter/material.dart';
-import 'package:obscuro_map/core/theme/dark_theme.dart';
-import 'package:obscuro_map/gen/assets.gen.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:obscuro_map/core/get_it/get_it.dart';
+import 'package:obscuro_map/core/navigation/routes/home_route.dart';
+import 'package:obscuro_map/features/splash/ui/bloc/splash_bloc.dart';
+import 'package:obscuro_map/features/splash/ui/bloc/splash_state.dart';
+import 'package:obscuro_map/features/splash/ui/splash_view.dart';
 
 class SplashPage extends StatelessWidget {
   const SplashPage({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: DarkTheme.darkThemeBackground,
-      body: Center(
-        child: TweenAnimationBuilder<double>(
-          tween: Tween<double>(begin: 0, end: 1),
-          duration: const Duration(milliseconds: 1800),
-          curve: Curves.easeInOut,
-          builder: (context, value, child) {
-            final logoAnimation = CurvedAnimation(
-              parent: AlwaysStoppedAnimation(value),
-              curve: const Interval(0, 0.6, curve: Curves.fastOutSlowIn),
-            ).value;
+    final map = TileLayer(
+      urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+      retinaMode: RetinaMode.isHighDensity(context),
+      userAgentPackageName: 'com.obscuro.map.app',
+    );
 
-            return Column(
-              mainAxisAlignment: .center,
-              children: [
-                Transform.translate(
-                  offset: Offset(0, (1 - logoAnimation) * 60),
-                  child: Opacity(
-                    opacity: logoAnimation,
-                    child: Assets.features.splash.appLogoPng.image(),
-                  ),
-                ),
-
-                const SizedBox(height: 98),
-
-                Opacity(
-                  opacity: CurvedAnimation(
-                    parent: AlwaysStoppedAnimation(value),
-                    curve: const Interval(0.7, 1.0, curve: Curves.linear),
-                  ).value,
-                  child: const CircularProgressIndicator(
-                    strokeWidth: 6,
-                    strokeAlign: 0,
-                    strokeCap: .round,
-                    color: DarkTheme.primary,
-                  ),
-                ),
-              ],
-            );
+    return MultiBlocProvider(
+      providers: [
+        BlocProvider<SplashBloc>(
+          create: (context) => getIt<SplashBloc>(),
+        ),
+      ],
+      child: MultiBlocListener(
+        listeners: [
+          BlocListener<SplashBloc, SplashState>(
+            listenWhen: (_, state) => state is SuccessSplashState,
+            listener: (_, state) =>
+                _onSuccessState(context, state as SuccessSplashState),
+          ),
+        ],
+        child: BlocBuilder<SplashBloc, SplashState>(
+          builder: (context, state) {
+            return SplashView(map: map);
           },
         ),
       ),
     );
+  }
+
+  void _onSuccessState(BuildContext context, SuccessSplashState state) {
+    HomeRoute($extra: state.map).replace(context);
   }
 }

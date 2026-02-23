@@ -3,9 +3,11 @@ import 'package:obscuro_map/core/navigation/app_router.dart';
 import 'package:obscuro_map/core/theme/dark_theme.dart';
 import 'package:obscuro_map/core/theme/light_theme.dart';
 
+import 'core/get_it/get_it.dart';
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
+  configureDependencies();
   runApp(const MyApp());
 }
 
