@@ -1,4 +1,5 @@
 import 'package:go_router/go_router.dart';
+import 'package:obscuro_map/core/navigation/routes/home_route.dart';
 import 'package:obscuro_map/core/navigation/routes/splash_route.dart';
 
 sealed class AppRouter {
@@ -6,6 +7,7 @@ sealed class AppRouter {
     initialLocation: '/splash',
     routes: [
       $splashRoute,
+      $homeRoute,
     ],
   );
 }
