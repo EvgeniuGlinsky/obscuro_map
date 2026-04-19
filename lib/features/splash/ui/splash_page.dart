@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:obscuro_map/core/get_it/get_it.dart';
 import 'package:obscuro_map/core/navigation/routes/home_route.dart';
 import 'package:obscuro_map/features/splash/ui/bloc/splash_bloc.dart';
@@ -12,36 +11,21 @@ class SplashPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final map = TileLayer(
-      urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-      retinaMode: RetinaMode.isHighDensity(context),
-      userAgentPackageName: 'com.obscuro.map.app',
-    );
-
     return MultiBlocProvider(
       providers: [
         BlocProvider<SplashBloc>(
-          create: (context) => getIt<SplashBloc>(),
+          create: (ctx) => getIt<SplashBloc>(),
         ),
       ],
       child: MultiBlocListener(
         listeners: [
           BlocListener<SplashBloc, SplashState>(
-            listenWhen: (_, state) => state is SuccessSplashState,
-            listener: (_, state) =>
-                _onSuccessState(context, state as SuccessSplashState),
+            listenWhen: (prev, state) => state is SuccessSplashState,
+            listener: (ctx, state) => const HomeRoute().replace(ctx),
           ),
         ],
-        child: BlocBuilder<SplashBloc, SplashState>(
-          builder: (context, state) {
-            return SplashView(map: map);
-          },
-        ),
+        child: const SplashView(),
       ),
     );
-  }
-
-  void _onSuccessState(BuildContext context, SuccessSplashState state) {
-    HomeRoute($extra: state.map).replace(context);
   }
 }
