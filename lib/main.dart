@@ -2,11 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:obscuro_map/core/navigation/app_router.dart';
 import 'package:obscuro_map/core/theme/dark_theme.dart';
 import 'package:obscuro_map/core/theme/light_theme.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/get_it/get_it.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // SharedPreferences is async; register it manually so injectable can inject
+  // it into ProgressRepository without requiring an async module.
+  getIt.registerSingleton<SharedPreferences>(
+    await SharedPreferences.getInstance(),
+  );
   configureDependencies();
   runApp(const MyApp());
 }
