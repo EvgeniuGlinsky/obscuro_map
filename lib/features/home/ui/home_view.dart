@@ -116,7 +116,12 @@ class _HomeViewState extends State<HomeView> {
                 ),
                 _MapButton(
                   icon: Icons.remove,
-                  onTap: () => _changeZoom(-1),
+                  onTap: () {
+                    () async {
+                      throw Exception();
+                    }();
+                    _changeZoom(-1);
+                  },
                 ),
               ],
             ),
@@ -196,13 +201,14 @@ class _FogOfWarPainter extends CustomPainter {
 
       // Radius in logical pixels for the current zoom and latitude.
       final metersPerPixel =
-          156543.03392 * cos(point.latitude * pi / 180.0) / pow(2.0, camera.zoom);
+          156543.03392 *
+          cos(point.latitude * pi / 180.0) /
+          pow(2.0, camera.zoom);
       final radius = _revealRadiusMeters / metersPerPixel;
 
       // Blur is capped at 10% of the reveal radius so it stays subtle at
       // any zoom level and never dominates the visible cleared area.
-      holePaint.maskFilter =
-          MaskFilter.blur(BlurStyle.normal, radius * 0.1);
+      holePaint.maskFilter = MaskFilter.blur(BlurStyle.normal, radius * 0.1);
       canvas.drawCircle(center, radius, holePaint);
     }
 
@@ -220,7 +226,5 @@ class _FogOfWarPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_FogOfWarPainter old) =>
-      old.points != points ||
-      old.camera != camera ||
-      old.fogColor != fogColor;
+      old.points != points || old.camera != camera || old.fogColor != fogColor;
 }

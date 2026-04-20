@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -28,10 +29,18 @@ class LocationBloc extends Bloc<LocationEvent, LocationState> {
       }
       if (permission == LocationPermission.denied ||
           permission == LocationPermission.deniedForever) {
+        FirebaseCrashlytics.instance.log(
+          'Location permission denied: $permission',
+        );
         emit(const LocationPermissionDenied());
         return;
       }
-    } on Exception {
+    } on Exception catch (e, st) {
+      await FirebaseCrashlytics.instance.recordError(
+        e,
+        st,
+        reason: 'Failed to check/request location permission',
+      );
       emit(const LocationPermissionDenied());
       return;
     }
@@ -62,6 +71,14 @@ class LocationBloc extends Bloc<LocationEvent, LocationState> {
         final next = List<LatLng>.unmodifiable([...pts, incoming]);
         _repository.save(next).ignore(); // fire-and-forget; no await needed
         return LocationTracking(next);
+      },
+      onError: (error, stack) {
+        FirebaseCrashlytics.instance.recordError(
+          error,
+          stack,
+          reason: 'Location stream error',
+        );
+        return state;
       },
     );
   }
