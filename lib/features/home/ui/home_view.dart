@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:obscuro_map/features/splash/ui/splash_view.dart';
 
 import '../bloc/location_bloc.dart';
 import '../bloc/location_state.dart';
@@ -23,6 +24,9 @@ class _HomeViewState extends State<HomeView> {
 
   GoogleMapController? _controller;
   bool _myLocationEnabled = false;
+  bool _showSplash = true;
+  bool _splashAnimationDone = false;
+  bool _mapCreated = false;
 
   List<LatLng> _latLngPoints = const [];
 
@@ -56,6 +60,17 @@ class _HomeViewState extends State<HomeView> {
   Future<void> _changeZoom(double delta) =>
       _controller?.animateCamera(CameraUpdate.zoomBy(delta)) ?? Future.value();
 
+  void _tryDismissSplash() {
+    if (_splashAnimationDone && _mapCreated) {
+      setState(() => _showSplash = false);
+    }
+  }
+
+  void _onSplashAnimationEnd() {
+    _splashAnimationDone = true;
+    _tryDismissSplash();
+  }
+
   @override
   Widget build(BuildContext context) {
     return BlocListener<LocationBloc, LocationState>(
@@ -80,7 +95,13 @@ class _HomeViewState extends State<HomeView> {
         children: [
           GoogleMap(
             initialCameraPosition: _initialCamera,
-            onMapCreated: (controller) => _controller = controller,
+            onMapCreated: (controller) {
+              _controller = controller;
+              if (_showSplash) {
+                _mapCreated = true;
+                _tryDismissSplash();
+              }
+            },
             // Update _camera on every frame of a pan/zoom gesture so the
             // painter recomputes screen positions without any async calls.
             onCameraMove: (pos) => setState(() => _camera = pos),
@@ -88,6 +109,7 @@ class _HomeViewState extends State<HomeView> {
             myLocationButtonEnabled: false,
             zoomControlsEnabled: false,
             mapToolbarEnabled: false,
+            rotateGesturesEnabled: false,
           ),
           IgnorePointer(
             child: CustomPaint(
@@ -99,6 +121,8 @@ class _HomeViewState extends State<HomeView> {
               ),
             ),
           ),
+          if (_showSplash)
+            SplashView(onAnimationEnd: _onSplashAnimationEnd),
           Positioned(
             right: 16,
             bottom: 48,
@@ -116,12 +140,7 @@ class _HomeViewState extends State<HomeView> {
                 ),
                 _MapButton(
                   icon: Icons.remove,
-                  onTap: () {
-                    () async {
-                      throw Exception();
-                    }();
-                    _changeZoom(-1);
-                  },
+                  onTap: () => _changeZoom(-1),
                 ),
               ],
             ),

@@ -11,7 +11,11 @@
       "Bash(bash)",
       "PowerShell(npm install *)",
       "PowerShell(Invoke-WebRequest -Uri \"https://firebase.tools/bin/win/instant\" -OutFile \"$env:TEMP\\\\firebase.exe\"; & \"$env:TEMP\\\\firebase.exe\" --version 2>&1)",
-      "Bash(choco install *)"
+      "Bash(choco install *)",
+      "Bash(python3 -c ' *)",
+      "Bash(python -c ' *)",
+      "Bash(python *)",
+      "mcp__ide__getDiagnostics"
     ]
   }
 }

@@ -24,7 +24,9 @@ class SplashPage extends StatelessWidget {
             listener: (ctx, state) => const HomeRoute().replace(ctx),
           ),
         ],
-        child: const SplashView(),
+        child: SplashView(
+          onAnimationEnd: () {},
+        ),
       ),
     );
   }
