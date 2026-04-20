@@ -13,3 +13,7 @@ final class LocationTracking extends LocationState {
 
   final List<LatLng> points;
 }
+
+final class LocationPermissionDenied extends LocationState {
+  const LocationPermissionDenied();
+}

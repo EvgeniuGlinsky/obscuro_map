@@ -21,12 +21,20 @@ class LocationBloc extends Bloc<LocationEvent, LocationState> {
     LocationStarted event,
     Emitter<LocationState> emit,
   ) async {
-    var permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
+    try {
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        emit(const LocationPermissionDenied());
+        return;
+      }
+    } on Exception {
+      emit(const LocationPermissionDenied());
+      return;
     }
-    if (permission == LocationPermission.denied ||
-        permission == LocationPermission.deniedForever) return;
 
     final saved = _repository.load();
     emit(LocationTracking(List.unmodifiable(saved)));
