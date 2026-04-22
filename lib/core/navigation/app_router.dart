@@ -1,7 +1,8 @@
 import 'package:go_router/go_router.dart';
-import 'package:obscuro_map/core/navigation/routes/home_route.dart';
 
-sealed class AppRouter {
+import 'routes/home_route.dart';
+
+abstract final class AppRouter {
   static final GoRouter router = GoRouter(
     initialLocation: '/home',
     routes: [

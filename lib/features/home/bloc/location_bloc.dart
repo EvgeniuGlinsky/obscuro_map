@@ -6,17 +6,20 @@ import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:injectable/injectable.dart';
 
-import '../repository/progress_repository.dart';
+import '../../../core/services/foreground_service.dart';
+import '../domain/usecases/load_progress_usecase.dart';
+import '../domain/usecases/save_progress_usecase.dart';
 import 'location_event.dart';
 import 'location_state.dart';
 
 @injectable
 class LocationBloc extends Bloc<LocationEvent, LocationState> {
-  LocationBloc(this._repository) : super(const LocationInitial()) {
+  LocationBloc(this._loadProgress, this._saveProgress) : super(const LocationInitial()) {
     on<LocationStarted>(_onStarted);
   }
 
-  final ProgressRepository _repository;
+  final LoadProgressUseCase _loadProgress;
+  final SaveProgressUseCase _saveProgress;
 
   Future<void> _onStarted(
     LocationStarted event,
@@ -45,9 +48,12 @@ class LocationBloc extends Bloc<LocationEvent, LocationState> {
       return;
     }
 
-    final saved = _repository.load();
+    await ForegroundService.startService();
+
+    final saved = _loadProgress();
     emit(LocationTracking(List.unmodifiable(saved)));
 
+    try {
     await emit.forEach<Position>(
       Geolocator.getPositionStream(
         locationSettings: const LocationSettings(
@@ -69,7 +75,7 @@ class LocationBloc extends Bloc<LocationEvent, LocationState> {
         }
 
         final next = List<LatLng>.unmodifiable([...pts, incoming]);
-        _repository.save(next).ignore(); // fire-and-forget; no await needed
+        _saveProgress(next).ignore(); // fire-and-forget; no await needed
         return LocationTracking(next);
       },
       onError: (error, stack) {
@@ -81,6 +87,9 @@ class LocationBloc extends Bloc<LocationEvent, LocationState> {
         return state;
       },
     );
+    } finally {
+      await ForegroundService.stopService();
+    }
   }
 
   static double _haversine(LatLng a, LatLng b) {

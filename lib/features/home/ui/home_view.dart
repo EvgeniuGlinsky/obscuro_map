@@ -25,8 +25,6 @@ class _HomeViewState extends State<HomeView> {
   GoogleMapController? _controller;
   bool _myLocationEnabled = false;
   bool _showSplash = true;
-  bool _splashAnimationDone = false;
-  bool _mapCreated = false;
 
   List<LatLng> _latLngPoints = const [];
 
@@ -60,16 +58,7 @@ class _HomeViewState extends State<HomeView> {
   Future<void> _changeZoom(double delta) =>
       _controller?.animateCamera(CameraUpdate.zoomBy(delta)) ?? Future.value();
 
-  void _tryDismissSplash() {
-    if (_splashAnimationDone && _mapCreated) {
-      setState(() => _showSplash = false);
-    }
-  }
-
-  void _onSplashAnimationEnd() {
-    _splashAnimationDone = true;
-    _tryDismissSplash();
-  }
+  void _onSplashAnimationEnd() => setState(() => _showSplash = false);
 
   @override
   Widget build(BuildContext context) {
@@ -95,13 +84,7 @@ class _HomeViewState extends State<HomeView> {
         children: [
           GoogleMap(
             initialCameraPosition: _initialCamera,
-            onMapCreated: (controller) {
-              _controller = controller;
-              if (_showSplash) {
-                _mapCreated = true;
-                _tryDismissSplash();
-              }
-            },
+            onMapCreated: (controller) => _controller = controller,
             // Update _camera on every frame of a pan/zoom gesture so the
             // painter recomputes screen positions without any async calls.
             onCameraMove: (pos) => setState(() => _camera = pos),

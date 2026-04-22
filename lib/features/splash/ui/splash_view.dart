@@ -7,17 +7,12 @@ class SplashView extends StatelessWidget {
 
   final VoidCallback onAnimationEnd;
 
-  static const double _logoWidthFactor = 2 / 8;
-  static const double _loaderSizeFactor = 1 / 12;
-  static const Duration _animationDuration = Duration(milliseconds: 2500);
+  static const Duration _animationDuration = Duration(seconds: 2);
   static const double _logoAnimationEnd = 0.6;
-  static const double _loaderAnimationStart = 0.7;
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final logoWidth = screenWidth * _logoWidthFactor;
-    final loaderSize = screenWidth * _loaderSizeFactor;
+    final logoWidth = MediaQuery.of(context).size.width + 100;
 
     return SizedBox.expand(
       child: ColoredBox(
@@ -38,41 +33,15 @@ class SplashView extends StatelessWidget {
                 ),
               ).value;
 
-              return Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Transform.translate(
-                    offset: Offset(0, (1 - logoAnimation) * 60),
-                    child: Opacity(
-                      opacity: logoAnimation,
-                      child: Assets.features.splash.appLogoPng.image(
-                        width: logoWidth,
-                        fit: BoxFit.contain,
-                      ),
-                    ),
+              return Transform.translate(
+                offset: Offset(0, (1 - logoAnimation) * 60),
+                child: Opacity(
+                  opacity: logoAnimation,
+                  child: Assets.features.splash.appLogoPng.image(
+                    width: logoWidth,
+                    fit: BoxFit.contain,
                   ),
-                  const SizedBox(height: 98),
-                  Opacity(
-                    opacity: CurvedAnimation(
-                      parent: AlwaysStoppedAnimation(value),
-                      curve: const Interval(
-                        _loaderAnimationStart,
-                        1.0,
-                        curve: Curves.linear,
-                      ),
-                    ).value,
-                    child: SizedBox(
-                      width: loaderSize,
-                      height: loaderSize,
-                      child: const CircularProgressIndicator(
-                        strokeWidth: 6,
-                        strokeAlign: 0,
-                        strokeCap: StrokeCap.round,
-                        color: DarkTheme.primary,
-                      ),
-                    ),
-                  ),
-                ],
+                ),
               );
             },
           ),
