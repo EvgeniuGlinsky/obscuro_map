@@ -4,14 +4,17 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:injectable/injectable.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-@singleton
-class ProgressRepository {
+import '../domain/repositories/i_progress_repository.dart';
+
+@Singleton(as: IProgressRepository)
+class ProgressRepository implements IProgressRepository {
   ProgressRepository(this._prefs);
 
   static const _key = 'fog_progress_v1';
 
   final SharedPreferences _prefs;
 
+  @override
   List<LatLng> load() {
     final raw = _prefs.getString(_key);
     if (raw == null) return const [];
@@ -26,6 +29,7 @@ class ProgressRepository {
     }
   }
 
+  @override
   Future<void> save(List<LatLng> points) {
     return _prefs.setString(
       _key,

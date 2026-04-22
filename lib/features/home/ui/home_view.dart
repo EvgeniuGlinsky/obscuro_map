@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:obscuro_map/features/splash/ui/splash_view.dart';
 
 import '../bloc/location_bloc.dart';
 import '../bloc/location_state.dart';
@@ -23,6 +24,7 @@ class _HomeViewState extends State<HomeView> {
 
   GoogleMapController? _controller;
   bool _myLocationEnabled = false;
+  bool _showSplash = true;
 
   List<LatLng> _latLngPoints = const [];
 
@@ -56,6 +58,8 @@ class _HomeViewState extends State<HomeView> {
   Future<void> _changeZoom(double delta) =>
       _controller?.animateCamera(CameraUpdate.zoomBy(delta)) ?? Future.value();
 
+  void _onSplashAnimationEnd() => setState(() => _showSplash = false);
+
   @override
   Widget build(BuildContext context) {
     return BlocListener<LocationBloc, LocationState>(
@@ -88,6 +92,7 @@ class _HomeViewState extends State<HomeView> {
             myLocationButtonEnabled: false,
             zoomControlsEnabled: false,
             mapToolbarEnabled: false,
+            rotateGesturesEnabled: false,
           ),
           IgnorePointer(
             child: CustomPaint(
@@ -99,6 +104,8 @@ class _HomeViewState extends State<HomeView> {
               ),
             ),
           ),
+          if (_showSplash)
+            SplashView(onAnimationEnd: _onSplashAnimationEnd),
           Positioned(
             right: 16,
             bottom: 48,
@@ -116,12 +123,7 @@ class _HomeViewState extends State<HomeView> {
                 ),
                 _MapButton(
                   icon: Icons.remove,
-                  onTap: () {
-                    () async {
-                      throw Exception();
-                    }();
-                    _changeZoom(-1);
-                  },
+                  onTap: () => _changeZoom(-1),
                 ),
               ],
             ),
