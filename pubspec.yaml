@@ -1,7 +1,6 @@
 name: obscuro_map
-description: "A new Flutter project."
-publish_to: 'none'
-version: 1.0.0+1
+description: "A location-based exploration app that gradually reveals the world map as users move through real places.publish_to: 'none'"
+version: 1.1.0+1
 
 environment:
   sdk: ^3.10.0
