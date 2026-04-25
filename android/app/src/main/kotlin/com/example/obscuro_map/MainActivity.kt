@@ -53,6 +53,25 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        // Single trigger: when the user brings the app to the foreground and
+        // the service is already alive, ask it to re-assert its foreground
+        // notification. Gated on isRunning() so this can never spawn a
+        // service. Inside the service this just re-calls startForeground()
+        // with the same id — idempotent, no duplicate notification, no
+        // lifecycle change.
+        if (!LocationForegroundService.isRunning()) return
+        val intent = Intent(this, LocationForegroundService::class.java).apply {
+            action = LocationForegroundService.ACTION_ENSURE_NOTIFICATION
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            ContextCompat.startForegroundService(this, intent)
+        } else {
+            startService(intent)
+        }
+    }
+
     private fun ensureNotificationPermission() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
         val perm = Manifest.permission.POST_NOTIFICATIONS

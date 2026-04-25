@@ -10,6 +10,7 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
+import java.util.concurrent.atomic.AtomicBoolean
 
 class LocationForegroundService : Service() {
 
@@ -18,19 +19,34 @@ class LocationForegroundService : Service() {
         const val NOTIFICATION_ID = 1001
         const val ACTION_START = "ACTION_START"
         const val ACTION_STOP = "ACTION_STOP"
+        const val ACTION_ENSURE_NOTIFICATION = "ACTION_ENSURE_NOTIFICATION"
         private const val TAG = "LocationFgService"
+
+        // Tracks whether the service instance is alive. Lets MainActivity
+        // cheaply gate the foreground re-assert hook so it never starts a
+        // stray service.
+        private val alive = AtomicBoolean(false)
+        fun isRunning(): Boolean = alive.get()
     }
 
     override fun onCreate() {
         super.onCreate()
+        alive.set(true)
         createNotificationChannel()
     }
 
+    override fun onDestroy() {
+        alive.set(false)
+        super.onDestroy()
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // The 5s startForeground() contract applies to EVERY start triggered
-        // by startForegroundService(), including the ACTION_STOP path when
-        // the service was previously killed and the system restarts it.
-        // Always promote to foreground first, then decide whether to stop.
+        // Every entry triggered by startForegroundService() must satisfy the
+        // 5s startForeground() contract — including ACTION_STOP delivered to
+        // a service whose process was previously killed and not yet promoted
+        // to foreground. Calling startForeground() is idempotent: with the
+        // same id and channel it just updates the existing notification, so
+        // repeated ACTION_START is safe.
         try {
             val notification = buildNotification()
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -43,9 +59,6 @@ class LocationForegroundService : Service() {
                 startForeground(NOTIFICATION_ID, notification)
             }
         } catch (t: Throwable) {
-            // Most common causes here: missing FOREGROUND_SERVICE_LOCATION
-            // permission on Android 14+, missing POST_NOTIFICATIONS on
-            // Android 13+, or invalid notification (no small icon / channel).
             Log.e(TAG, "startForeground failed", t)
             stopSelf(startId)
             return START_NOT_STICKY
@@ -60,6 +73,9 @@ class LocationForegroundService : Service() {
             stopSelf(startId)
             return START_NOT_STICKY
         }
+
+        // ACTION_START or a null intent delivered by the system when it
+        // restarts a START_STICKY service after a kill.
         return START_STICKY
     }
 
@@ -90,7 +106,7 @@ class LocationForegroundService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         else PendingIntent.FLAG_UPDATE_CURRENT
 
-        val pendingIntent = PendingIntent.getActivity(this, 0, launchIntent, pendingFlags)
+        val contentIntent = PendingIntent.getActivity(this, 0, launchIntent, pendingFlags)
 
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
             Notification.Builder(this, CHANNEL_ID)
@@ -101,7 +117,7 @@ class LocationForegroundService : Service() {
             .setContentTitle("Obscuro Map")
             .setContentText("Tracking your route")
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentIntent(pendingIntent)
+            .setContentIntent(contentIntent)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setCategory(Notification.CATEGORY_SERVICE)
