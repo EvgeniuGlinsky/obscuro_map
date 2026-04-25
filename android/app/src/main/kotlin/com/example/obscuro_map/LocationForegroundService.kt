@@ -6,8 +6,10 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 
 class LocationForegroundService : Service() {
 
@@ -16,6 +18,7 @@ class LocationForegroundService : Service() {
         const val NOTIFICATION_ID = 1001
         const val ACTION_START = "ACTION_START"
         const val ACTION_STOP = "ACTION_STOP"
+        private const val TAG = "LocationFgService"
     }
 
     override fun onCreate() {
@@ -24,20 +27,38 @@ class LocationForegroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // The 5s startForeground() contract applies to EVERY start triggered
+        // by startForegroundService(), including the ACTION_STOP path when
+        // the service was previously killed and the system restarts it.
+        // Always promote to foreground first, then decide whether to stop.
+        try {
+            val notification = buildNotification()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(
+                    NOTIFICATION_ID,
+                    notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+                )
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
+            }
+        } catch (t: Throwable) {
+            // Most common causes here: missing FOREGROUND_SERVICE_LOCATION
+            // permission on Android 14+, missing POST_NOTIFICATIONS on
+            // Android 13+, or invalid notification (no small icon / channel).
+            Log.e(TAG, "startForeground failed", t)
+            stopSelf(startId)
+            return START_NOT_STICKY
+        }
+
         if (intent?.action == ACTION_STOP) {
-            // Explicit stop requested by the app.
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 stopForeground(STOP_FOREGROUND_REMOVE)
             } else {
                 @Suppress("DEPRECATION") stopForeground(true)
             }
-            stopSelf()
-        } else {
-            // ACTION_START — or a null intent delivered by the system when it
-            // restarts a START_STICKY service after killing it. Both cases must
-            // call startForeground() within 5 s on Android 8+ or the OS will
-            // raise RemoteServiceException and kill the service immediately.
-            startForeground(NOTIFICATION_ID, buildNotification())
+            stopSelf(startId)
+            return START_NOT_STICKY
         }
         return START_STICKY
     }
@@ -46,6 +67,8 @@ class LocationForegroundService : Service() {
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val manager = getSystemService(NotificationManager::class.java) ?: return
+            if (manager.getNotificationChannel(CHANNEL_ID) != null) return
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 "Location Tracking",
@@ -54,7 +77,7 @@ class LocationForegroundService : Service() {
                 description = "Shows while Obscuro Map is tracking your route"
                 setShowBadge(false)
             }
-            getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+            manager.createNotificationChannel(channel)
         }
     }
 
@@ -77,9 +100,10 @@ class LocationForegroundService : Service() {
         return builder
             .setContentTitle("Obscuro Map")
             .setContentText("Tracking your route")
-            .setSmallIcon(R.drawable.ic_notification) // monochrome alpha-mask vector
+            .setSmallIcon(R.drawable.ic_notification)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
+            .setOnlyAlertOnce(true)
             .setCategory(Notification.CATEGORY_SERVICE)
             .build()
     }
