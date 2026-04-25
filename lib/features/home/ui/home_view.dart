@@ -135,12 +135,22 @@ class _HomeViewState extends State<HomeView> {
     setState(() => _eraserPosition = null);
   }
 
+  // Zoom 16.5 yields roughly a 400 m wide visible area on a typical
+  // ~400 dp-wide phone at mid latitudes (156543·cos(lat)/2^16.5 m per dp).
+  // Applied only on the initial auto-center; the recenter button keeps the
+  // user's current zoom.
+  static const _initialUserZoom = 16.5;
+
   void _autoCenterOnce() {
     if (_hasCenteredOnUser) return;
     final state = context.read<LocationBloc>().state;
-    if (state is LocationTracking && _controller != null) {
+    if (state is LocationTracking &&
+        state.points.isNotEmpty &&
+        _controller != null) {
       _hasCenteredOnUser = true;
-      _goToMyLocation(animate: false);
+      _controller!.moveCamera(
+        CameraUpdate.newLatLngZoom(state.points.last, _initialUserZoom),
+      );
     }
   }
 
