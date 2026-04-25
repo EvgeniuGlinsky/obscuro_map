@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:geolocator/geolocator.dart';
@@ -6,9 +8,12 @@ import 'package:injectable/injectable.dart';
 
 import '../../../core/constants/map_constants.dart';
 import '../../../core/services/foreground_service.dart';
+import '../../auth/domain/repositories/i_auth_repository.dart';
 import '../domain/repositories/i_progress_repository.dart';
+import '../domain/repositories/i_remote_progress_repository.dart';
 import '../domain/usecases/append_track_point_usecase.dart';
 import '../domain/usecases/erase_points_usecase.dart';
+import '../domain/usecases/sync_progress_on_login_usecase.dart';
 import 'location_event.dart';
 import 'location_state.dart';
 
@@ -18,16 +23,41 @@ class LocationBloc extends Bloc<LocationEvent, LocationState> {
     this._repository,
     this._appendTrackPoint,
     this._erasePoints,
+    this._authRepository,
+    this._remoteRepository,
+    this._syncProgress,
   ) : super(const LocationInitial()) {
     on<LocationStarted>(_onStarted);
     on<LocationPointsErased>(_onPointsErased);
     on<LocationProgressSaved>(_onProgressSaved);
     on<LocationAreaFilled>(_onAreaFilled);
+    on<LocationAuthChanged>(_onAuthChanged);
+
+    _authSub = _authRepository.user
+        .map((u) => u?.uid)
+        .distinct()
+        .listen((uid) => add(LocationAuthChanged(uid)));
+    final initialUid = _authRepository.currentUser?.uid;
+    if (initialUid != null) _currentUid = initialUid;
   }
 
   final IProgressRepository _repository;
   final AppendTrackPointUseCase _appendTrackPoint;
   final ErasePointsUseCase _erasePoints;
+  final IAuthRepository _authRepository;
+  final IRemoteProgressRepository _remoteRepository;
+  final SyncProgressOnLoginUseCase _syncProgress;
+
+  StreamSubscription<String?>? _authSub;
+
+  /// `null` while signed out. Saves are mirrored to the cloud only when this
+  /// is set.
+  String? _currentUid;
+
+  /// Tracks which uid we already synced this session, to keep the round-trip
+  /// to a single read+write per sign-in regardless of how many auth events
+  /// the stream replays (cold start emits twice on some Firebase versions).
+  String? _syncedUid;
 
   Future<void> _onStarted(
     LocationStarted event,
@@ -77,10 +107,11 @@ class LocationBloc extends Bloc<LocationEvent, LocationState> {
 
           final incoming = LatLng(position.latitude, position.longitude);
           final next = _appendTrackPoint(current.points, incoming);
-          if (next == null) return current; // below movement threshold
+          if (next == null) return current;
 
           final unmodifiable = List<LatLng>.unmodifiable(next);
           _repository.save(unmodifiable).ignore();
+          _mirrorToRemote(points: unmodifiable, fillPoints: current.fillPoints);
           return LocationTracking(unmodifiable, fillPoints: current.fillPoints);
         },
         onError: (error, stack) {
@@ -97,7 +128,10 @@ class LocationBloc extends Bloc<LocationEvent, LocationState> {
     }
   }
 
-  void _onPointsErased(LocationPointsErased event, Emitter<LocationState> emit) {
+  void _onPointsErased(
+    LocationPointsErased event,
+    Emitter<LocationState> emit,
+  ) {
     final current = state;
     if (current is! LocationTracking) return;
     final result = _erasePoints(
@@ -106,11 +140,16 @@ class LocationBloc extends Bloc<LocationEvent, LocationState> {
       center: event.center,
       radiusMeters: event.radiusMeters,
     );
-    emit(LocationTracking(
-      List.unmodifiable(result.points),
-      fillPoints: List.unmodifiable(result.fillPoints),
-    ));
-    // Caller dispatches LocationProgressSaved when the gesture ends.
+    final newPoints = List<LatLng>.unmodifiable(result.points);
+    final newFill = List<LatLng>.unmodifiable(result.fillPoints);
+    emit(LocationTracking(newPoints, fillPoints: newFill));
+    // Persist locally on every erase, not just on gesture end. The gesture
+    // can be cancelled (pointer leaves the widget, app backgrounded, parent
+    // wins arena) without firing onTapUp / onPanEnd, in which case the
+    // batched save would never run and the deletion would survive only in
+    // memory. Cloud mirror remains debounced via LocationProgressSaved.
+    _repository.save(newPoints).ignore();
+    _repository.saveFill(newFill).ignore();
   }
 
   Future<void> _onProgressSaved(
@@ -123,6 +162,10 @@ class LocationBloc extends Bloc<LocationEvent, LocationState> {
       _repository.save(current.points),
       _repository.saveFill(current.fillPoints),
     ]);
+    _mirrorToRemote(
+      points: current.points,
+      fillPoints: current.fillPoints,
+    );
   }
 
   void _onAreaFilled(LocationAreaFilled event, Emitter<LocationState> emit) {
@@ -134,6 +177,67 @@ class LocationBloc extends Bloc<LocationEvent, LocationState> {
           List.unmodifiable([...current.fillPoints, ...event.fillPoints]),
     );
     _repository.saveFill(next.fillPoints).ignore();
+    _mirrorToRemote(points: next.points, fillPoints: next.fillPoints);
     emit(next);
+  }
+
+  Future<void> _onAuthChanged(
+    LocationAuthChanged event,
+    Emitter<LocationState> emit,
+  ) async {
+    _currentUid = event.uid;
+    if (event.uid == null) {
+      // Signed out — keep local data, just stop mirroring.
+      _syncedUid = null;
+      return;
+    }
+    if (_syncedUid == event.uid) return; // already synced this session
+    _syncedUid = event.uid;
+
+    try {
+      final result = await _syncProgress(event.uid!);
+      switch (result) {
+        case SyncUploadedLocal():
+          // Local stayed authoritative; nothing to do.
+          break;
+        case SyncDownloadedRemote(:final points, :final fillPoints):
+          // Cloud overwrote local — replace in-memory state.
+          emit(LocationTracking(
+            List.unmodifiable(points),
+            fillPoints: List.unmodifiable(fillPoints),
+          ));
+          break;
+      }
+    } on Exception catch (e, st) {
+      // Treat sync failure as "act local-only for this session". The next
+      // save will retry the cloud write.
+      _syncedUid = null;
+      await FirebaseCrashlytics.instance.recordError(
+        e,
+        st,
+        reason: 'Cloud progress sync failed for uid=${event.uid}',
+      );
+    }
+  }
+
+  void _mirrorToRemote({
+    required List<LatLng> points,
+    required List<LatLng> fillPoints,
+  }) {
+    final uid = _currentUid;
+    if (uid == null) return;
+    _remoteRepository.save(uid, points: points, fillPoints: fillPoints).onError(
+      (error, stack) => FirebaseCrashlytics.instance.recordError(
+        error ?? 'unknown',
+        stack,
+        reason: 'Mirror to Firestore failed',
+      ),
+    );
+  }
+
+  @override
+  Future<void> close() async {
+    await _authSub?.cancel();
+    return super.close();
   }
 }

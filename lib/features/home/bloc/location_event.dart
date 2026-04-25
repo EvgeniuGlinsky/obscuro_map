@@ -26,3 +26,10 @@ final class LocationAreaFilled extends LocationEvent {
   const LocationAreaFilled({required this.fillPoints});
   final List<LatLng> fillPoints;
 }
+
+/// Internal: fires when the auth state changes. [uid] is `null` while
+/// signed out. Triggers a one-time cloud sync per uid on sign-in.
+final class LocationAuthChanged extends LocationEvent {
+  const LocationAuthChanged(this.uid);
+  final String? uid;
+}

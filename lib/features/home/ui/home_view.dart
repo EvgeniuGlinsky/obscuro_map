@@ -9,6 +9,7 @@ import '../../../core/constants/app_strings.dart';
 import '../../../core/constants/map_constants.dart';
 import '../../../core/constants/ui_constants.dart';
 import '../../../core/di/get_it.dart';
+import '../../auth/ui/sign_in_button.dart';
 import '../bloc/location_bloc.dart';
 import '../bloc/location_event.dart';
 import '../bloc/location_state.dart';
@@ -32,20 +33,46 @@ class _HomeViewState extends State<HomeView> {
   bool _hasCenteredOnUser = false;
   bool _eraserActive = false;
   bool _fillActive = false;
-  Offset? _eraserPosition;
 
-  // Notifier owned by this state; the painter subscribes to it directly so
-  // camera moves never trigger a full widget-tree rebuild.
+  // All four notifiers below drive painter repaints WITHOUT widget rebuilds.
+  // The painter subscribes via Listenable.merge, so updates skip the build
+  // pipeline entirely and incur only a single canvas repaint.
   final _cameraNotifier = ValueNotifier<CameraPosition>(_initialCamera);
+  final _trackNotifier = ValueNotifier<List<_PointCache>>(const []);
+  final _fillNotifier = ValueNotifier<List<_PointCache>>(const []);
+  final _eraserPositionNotifier = ValueNotifier<Offset?>(null);
 
-  // Pre-computed Mercator X/Y for the GPS track and fill points.
-  // Rebuilt only when the respective list changes — not on every camera frame.
-  List<_PointCache> _trackCache = const [];
-  List<_PointCache> _fillCache = const [];
+  // Identity-cache the latest source lists so we skip rebuilding _PointCache
+  // for whichever list didn't actually change between bloc emissions.
+  List<LatLng>? _lastTrackSource;
+  List<LatLng>? _lastFillSource;
+
+  // Painter instances are constructed once in initState so their cached Paint
+  // objects survive across rebuilds and GPS updates.
+  late final _FogOfWarPainter _fogPainter;
+  late final _EraserCirclePainter _eraserPainter;
+
+  @override
+  void initState() {
+    super.initState();
+    _fogPainter = _FogOfWarPainter(
+      trackNotifier: _trackNotifier,
+      fillNotifier: _fillNotifier,
+      cameraNotifier: _cameraNotifier,
+      fogColor: kFogColor,
+    );
+    _eraserPainter = _EraserCirclePainter(
+      positionNotifier: _eraserPositionNotifier,
+      cameraNotifier: _cameraNotifier,
+    );
+  }
 
   @override
   void dispose() {
     _cameraNotifier.dispose();
+    _trackNotifier.dispose();
+    _fillNotifier.dispose();
+    _eraserPositionNotifier.dispose();
     _controller?.dispose();
     super.dispose();
   }
@@ -89,13 +116,6 @@ class _HomeViewState extends State<HomeView> {
     return LatLng(lat, lng);
   }
 
-  double _eraserRadiusPx() {
-    final camera = _cameraNotifier.value;
-    final zoomScale = pow(2.0, camera.zoom) as double;
-    final camLatRad = camera.target.latitude * pi / 180.0;
-    return kEraserRadiusMeters / (156543.03392 * cos(camLatRad)) * zoomScale;
-  }
-
   void _onEraserGesture(Offset pos) {
     context.read<LocationBloc>().add(
       LocationPointsErased(
@@ -103,7 +123,7 @@ class _HomeViewState extends State<HomeView> {
         radiusMeters: kEraserRadiusMeters,
       ),
     );
-    setState(() => _eraserPosition = pos);
+    _eraserPositionNotifier.value = pos; // notifier-only; no setState
   }
 
   void _onFillTap(Offset pos) {
@@ -131,7 +151,7 @@ class _HomeViewState extends State<HomeView> {
 
   void _onEraserGestureEnd() {
     context.read<LocationBloc>().add(const LocationProgressSaved());
-    setState(() => _eraserPosition = null);
+    _eraserPositionNotifier.value = null;
   }
 
   void _autoCenterOnce() {
@@ -150,30 +170,40 @@ class _HomeViewState extends State<HomeView> {
   Future<void> _changeZoom(double delta) =>
       _controller?.animateCamera(CameraUpdate.zoomBy(delta)) ?? Future.value();
 
+  void _onLocationState(LocationState state) {
+    if (state is LocationTracking) {
+      // Identity-skip: only rebuild the cache whose source actually changed.
+      if (!identical(state.points, _lastTrackSource)) {
+        _lastTrackSource = state.points;
+        _trackNotifier.value =
+            state.points.map(_PointCache.fromLatLng).toList(growable: false);
+      }
+      if (!identical(state.fillPoints, _lastFillSource)) {
+        _lastFillSource = state.fillPoints;
+        _fillNotifier.value = state.fillPoints
+            .map(_PointCache.fromLatLng)
+            .toList(growable: false);
+      }
+      // One-time setState — flips on the first fix and never again.
+      if (!_myLocationEnabled) {
+        setState(() => _myLocationEnabled = true);
+      }
+      _autoCenterOnce();
+    } else if (state is LocationPermissionDenied) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(kLocationPermissionDeniedMessage),
+          duration: kSnackBarDuration,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final mapInteractive = !_eraserActive && !_fillActive;
     return BlocListener<LocationBloc, LocationState>(
-      listener: (context, state) {
-        if (state is LocationTracking) {
-          setState(() {
-            _trackCache = state.points
-                .map(_PointCache.fromLatLng)
-                .toList(growable: false);
-            _fillCache = state.fillPoints
-                .map(_PointCache.fromLatLng)
-                .toList(growable: false);
-            if (!_myLocationEnabled) _myLocationEnabled = true;
-          });
-          _autoCenterOnce();
-        } else if (state is LocationPermissionDenied) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(kLocationPermissionDeniedMessage),
-              duration: kSnackBarDuration,
-            ),
-          );
-        }
-      },
+      listener: (_, state) => _onLocationState(state),
       child: Stack(
         children: [
           GoogleMap(
@@ -189,11 +219,9 @@ class _HomeViewState extends State<HomeView> {
             zoomControlsEnabled: false,
             mapToolbarEnabled: false,
             rotateGesturesEnabled: false,
-            // Lock map gestures while eraser or fill mode is active so our
-            // GestureDetector captures all touch events.
-            scrollGesturesEnabled: !_eraserActive && !_fillActive,
-            zoomGesturesEnabled: !_eraserActive && !_fillActive,
-            tiltGesturesEnabled: !_eraserActive && !_fillActive,
+            scrollGesturesEnabled: mapInteractive,
+            zoomGesturesEnabled: mapInteractive,
+            tiltGesturesEnabled: mapInteractive,
           ),
           // RepaintBoundary promotes the fog overlay to its own compositing
           // layer so its repaints never dirty sibling widgets.
@@ -201,12 +229,7 @@ class _HomeViewState extends State<HomeView> {
             child: IgnorePointer(
               child: CustomPaint(
                 size: Size.infinite,
-                painter: _FogOfWarPainter(
-                  trackCache: _trackCache,
-                  fillCache: _fillCache,
-                  cameraNotifier: _cameraNotifier,
-                  fogColor: kFogColor,
-                ),
+                painter: _fogPainter,
               ),
             ),
           ),
@@ -216,25 +239,47 @@ class _HomeViewState extends State<HomeView> {
               onTapDown: (d) => _onFillTap(d.localPosition),
               child: const SizedBox.expand(),
             ),
-          if (_eraserActive)
+          if (_eraserActive) ...[
             GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTapDown: (d) => _onEraserGesture(d.localPosition),
               onTapUp: (_) => _onEraserGestureEnd(),
+              // onTapCancel covers the case where the tap is upgraded to a
+              // pan or the gesture loses arena — without it, neither tapUp
+              // nor panEnd would fire and the cloud mirror would be skipped.
+              onTapCancel: _onEraserGestureEnd,
               onPanUpdate: (d) => _onEraserGesture(d.localPosition),
               onPanEnd: (_) => _onEraserGestureEnd(),
+              onPanCancel: _onEraserGestureEnd,
               child: const SizedBox.expand(),
             ),
-          if (_eraserActive && _eraserPosition != null)
-            IgnorePointer(
-              child: CustomPaint(
-                size: Size.infinite,
-                painter: _EraserCirclePainter(
-                  position: _eraserPosition!,
-                  radiusPx: _eraserRadiusPx(),
+            // The painter no-ops when position is null, so we keep it
+            // mounted while the eraser tool is active and let pan events
+            // drive repaints via the position notifier alone.
+            RepaintBoundary(
+              child: IgnorePointer(
+                child: CustomPaint(
+                  size: Size.infinite,
+                  painter: _eraserPainter,
                 ),
               ),
             ),
+          ],
+          const Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: EdgeInsets.only(top: 12),
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: SignInButton(),
+                ),
+              ),
+            ),
+          ),
           Positioned(
             right: kMapButtonsRightInset,
             bottom: kMapButtonsBottomInset,
@@ -317,33 +362,37 @@ class _MapButton extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _EraserCirclePainter extends CustomPainter {
-  const _EraserCirclePainter({required this.position, required this.radiusPx});
+  _EraserCirclePainter({
+    required this.positionNotifier,
+    required this.cameraNotifier,
+  }) : super(repaint: Listenable.merge([positionNotifier, cameraNotifier]));
 
-  final Offset position;
-  final double radiusPx;
+  final ValueNotifier<Offset?> positionNotifier;
+  final ValueNotifier<CameraPosition> cameraNotifier;
+
+  // Paints are immutable for this overlay — instantiate once, reuse forever.
+  static final Paint _fillPaint = Paint()
+    ..color = kEraserOverlayColor
+    ..style = PaintingStyle.fill;
+  static final Paint _strokePaint = Paint()
+    ..color = kEraserStrokeColor
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = kEraserStrokeWidth;
 
   @override
   void paint(Canvas canvas, Size size) {
-    canvas.drawCircle(
-      position,
-      radiusPx,
-      Paint()
-        ..color = kEraserOverlayColor
-        ..style = PaintingStyle.fill,
-    );
-    canvas.drawCircle(
-      position,
-      radiusPx,
-      Paint()
-        ..color = kEraserStrokeColor
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = kEraserStrokeWidth,
-    );
+    final position = positionNotifier.value;
+    if (position == null) return;
+    final camera = cameraNotifier.value;
+    final zoomScale = pow(2.0, camera.zoom) as double;
+    final cosLat = cos(camera.target.latitude * pi / 180.0);
+    final radiusPx = kEraserRadiusMeters / (156543.03392 * cosLat) * zoomScale;
+    canvas.drawCircle(position, radiusPx, _fillPaint);
+    canvas.drawCircle(position, radiusPx, _strokePaint);
   }
 
   @override
-  bool shouldRepaint(_EraserCirclePainter old) =>
-      old.position != position || old.radiusPx != radiusPx;
+  bool shouldRepaint(_EraserCirclePainter old) => false; // driven by repaint listenable
 }
 
 // ---------------------------------------------------------------------------
@@ -373,23 +422,41 @@ final class _PointCache {
 
 class _FogOfWarPainter extends CustomPainter {
   _FogOfWarPainter({
-    required this.trackCache,
-    required this.fillCache,
+    required this.trackNotifier,
+    required this.fillNotifier,
     required this.cameraNotifier,
     required this.fogColor,
-  }) : super(repaint: cameraNotifier);
+  })  : _fogPaint = Paint()..color = fogColor,
+        super(
+          repaint: Listenable.merge(
+            [trackNotifier, fillNotifier, cameraNotifier],
+          ),
+        );
 
-  final List<_PointCache> trackCache;
-  final List<_PointCache> fillCache;
+  final ValueNotifier<List<_PointCache>> trackNotifier;
+  final ValueNotifier<List<_PointCache>> fillNotifier;
   final ValueNotifier<CameraPosition> cameraNotifier;
   final Color fogColor;
 
+  // Cached, mutable paint objects. Mutating fields (e.g. strokeWidth) per
+  // frame is fine — paint objects are designed for reuse — and avoids the
+  // per-repaint allocation pressure of constructing fresh Paints.
+  final Paint _fogPaint;
+  final Paint _layerPaint = Paint();
+  final Paint _strokePaint = Paint()
+    ..blendMode = BlendMode.clear
+    ..style = PaintingStyle.stroke
+    ..strokeCap = StrokeCap.round
+    ..strokeJoin = StrokeJoin.round;
+  final Paint _clearCirclePaint = Paint()..blendMode = BlendMode.clear;
+
   @override
   void paint(Canvas canvas, Size size) {
-    final fogPaint = Paint()..color = fogColor;
+    final trackCache = trackNotifier.value;
+    final fillCache = fillNotifier.value;
 
     if (trackCache.isEmpty && fillCache.isEmpty) {
-      canvas.drawRect(Offset.zero & size, fogPaint);
+      canvas.drawRect(Offset.zero & size, _fogPaint);
       return;
     }
 
@@ -405,7 +472,7 @@ class _FogOfWarPainter extends CustomPainter {
     final strokeRadius =
         kRevealRadiusMeters / (156543.03392 * cosLat) * zoomScale;
     if (strokeRadius < 0.5) {
-      canvas.drawRect(Offset.zero & size, fogPaint);
+      canvas.drawRect(Offset.zero & size, _fogPaint);
       return;
     }
 
@@ -444,26 +511,18 @@ class _FogOfWarPainter extends CustomPainter {
       prevDy = dy;
     }
 
-    canvas.saveLayer(Offset.zero & size, Paint());
-    canvas.drawRect(Offset.zero & size, fogPaint);
+    canvas.saveLayer(Offset.zero & size, _layerPaint);
+    canvas.drawRect(Offset.zero & size, _fogPaint);
 
-    canvas.drawPath(
-      path,
-      Paint()
-        ..blendMode = BlendMode.clear
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = strokeRadius * 2.0
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round,
-    );
+    _strokePaint.strokeWidth = strokeRadius * 2.0;
+    canvas.drawPath(path, _strokePaint);
 
     if (fillCache.isNotEmpty) {
-      final circlePaint = Paint()..blendMode = BlendMode.clear;
       for (final p in fillCache) {
         canvas.drawCircle(
           Offset(hw + p.mx * scale - cx, hh + p.my * scale - cy),
           strokeRadius,
-          circlePaint,
+          _clearCirclePaint,
         );
       }
     }
@@ -472,10 +531,5 @@ class _FogOfWarPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_FogOfWarPainter old) =>
-      old.trackCache != trackCache ||
-      old.fillCache != fillCache ||
-      old.cameraNotifier != cameraNotifier ||
-      old.fogColor != fogColor;
+  bool shouldRepaint(_FogOfWarPainter old) => false; // driven by repaint listenable
 }
-

@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "585519962797",
+    "project_id": "obscuro-map-app",
+    "storage_bucket": "obscuro-map-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:585519962797:android:6fc160cef01af71a5d8424",
+        "android_client_info": {
+          "package_name": "com.example.obscuro_map"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "585519962797-n3hpl5hulfiemolj0o7o1vvvvjc5ialj.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDUIgTNd2_p9h0ni7NTxOmaaJUC_hQ_Ivw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "585519962797-n3hpl5hulfiemolj0o7o1vvvvjc5ialj.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
