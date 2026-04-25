@@ -114,8 +114,7 @@ class LocationForegroundService : Service() {
             @Suppress("DEPRECATION") Notification.Builder(this)
 
         return builder
-            .setContentTitle("Obscuro Map")
-            .setContentText("Tracking your route")
+            .setContentTitle("Tracking your route")
             .setSmallIcon(R.drawable.ic_notification)
             .setContentIntent(contentIntent)
             .setOngoing(true)
