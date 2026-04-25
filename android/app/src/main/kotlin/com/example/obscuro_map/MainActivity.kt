@@ -11,13 +11,11 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
 
-    private val channelName = "obscuro_map/foreground_service"
-
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
-            channelName
+            CHANNEL_NAME
         ).setMethodCallHandler { call, result ->
             when (call.method) {
                 "startService" -> {
@@ -80,6 +78,9 @@ class MainActivity : FlutterActivity() {
     }
 
     companion object {
+        // Mirror of the Dart-side platform channel name in
+        // lib/core/constants/platform_channels.dart. Keep both sides in sync.
+        private const val CHANNEL_NAME = "obscuro_map/foreground_service"
         private const val REQ_POST_NOTIFICATIONS = 4711
     }
 }

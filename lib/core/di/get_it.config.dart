@@ -17,12 +17,11 @@ import '../../features/home/bloc/location_bloc.dart' as _i678;
 import '../../features/home/data/progress_repository.dart' as _i977;
 import '../../features/home/domain/repositories/i_progress_repository.dart'
     as _i1021;
-import '../../features/home/domain/usecases/load_fill_usecase.dart' as _i1014;
-import '../../features/home/domain/usecases/load_progress_usecase.dart'
-    as _i541;
-import '../../features/home/domain/usecases/save_fill_usecase.dart' as _i500;
-import '../../features/home/domain/usecases/save_progress_usecase.dart'
-    as _i389;
+import '../../features/home/domain/usecases/append_track_point_usecase.dart'
+    as _i245;
+import '../../features/home/domain/usecases/compute_fill_area_usecase.dart'
+    as _i408;
+import '../../features/home/domain/usecases/erase_points_usecase.dart' as _i752;
 import 'app_module.dart' as _i460;
 
 extension GetItInjectableX on _i174.GetIt {
@@ -37,27 +36,23 @@ extension GetItInjectableX on _i174.GetIt {
       () => appModule.sharedPreferences,
       preResolve: true,
     );
+    gh.lazySingleton<_i245.AppendTrackPointUseCase>(
+      () => const _i245.AppendTrackPointUseCase(),
+    );
+    gh.lazySingleton<_i408.ComputeFillAreaUseCase>(
+      () => const _i408.ComputeFillAreaUseCase(),
+    );
+    gh.lazySingleton<_i752.ErasePointsUseCase>(
+      () => const _i752.ErasePointsUseCase(),
+    );
     gh.singleton<_i1021.IProgressRepository>(
       () => _i977.ProgressRepository(gh<_i460.SharedPreferences>()),
     );
-    gh.factory<_i1014.LoadFillUseCase>(
-      () => _i1014.LoadFillUseCase(gh<_i1021.IProgressRepository>()),
-    );
-    gh.factory<_i541.LoadProgressUseCase>(
-      () => _i541.LoadProgressUseCase(gh<_i1021.IProgressRepository>()),
-    );
-    gh.factory<_i500.SaveFillUseCase>(
-      () => _i500.SaveFillUseCase(gh<_i1021.IProgressRepository>()),
-    );
-    gh.factory<_i389.SaveProgressUseCase>(
-      () => _i389.SaveProgressUseCase(gh<_i1021.IProgressRepository>()),
-    );
     gh.factory<_i678.LocationBloc>(
       () => _i678.LocationBloc(
-        gh<_i541.LoadProgressUseCase>(),
-        gh<_i389.SaveProgressUseCase>(),
-        gh<_i1014.LoadFillUseCase>(),
-        gh<_i500.SaveFillUseCase>(),
+        gh<_i1021.IProgressRepository>(),
+        gh<_i245.AppendTrackPointUseCase>(),
+        gh<_i752.ErasePointsUseCase>(),
       ),
     );
     return this;
