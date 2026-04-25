@@ -15,7 +15,10 @@
       "Bash(python3 -c ' *)",
       "Bash(python -c ' *)",
       "Bash(python *)",
-      "mcp__ide__getDiagnostics"
+      "mcp__ide__getDiagnostics",
+      "Bash(rm \"C:/workspace/lib/features/splash/ui/splash_view.dart\")",
+      "Bash(rmdir \"C:/workspace/lib/features/splash/ui\")",
+      "Bash(rmdir \"C:/workspace/lib/features/splash\")"
     ]
   }
 }

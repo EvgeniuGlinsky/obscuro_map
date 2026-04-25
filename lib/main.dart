@@ -33,7 +33,7 @@ class _App extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       routerConfig: AppRouter.router,
       theme: ThemeData(
-        colorScheme: ColorScheme.dark(
+        colorScheme: const ColorScheme.dark(
           primary: DarkTheme.primary,
           surface: DarkTheme.darkThemeBackground,
         ),

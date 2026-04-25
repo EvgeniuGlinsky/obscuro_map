@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:obscuro_map/features/splash/ui/splash_view.dart';
 
 import '../bloc/location_bloc.dart';
 import '../bloc/location_state.dart';
@@ -24,41 +23,54 @@ class _HomeViewState extends State<HomeView> {
 
   GoogleMapController? _controller;
   bool _myLocationEnabled = false;
-  bool _showSplash = true;
+  bool _hasCenteredOnUser = false;
+  // Notifier owned by this state; the painter subscribes to it directly so
+  // camera moves never trigger a full widget-tree rebuild.
+  final _cameraNotifier = ValueNotifier<CameraPosition>(_initialCamera);
 
-  List<LatLng> _latLngPoints = const [];
-
-  // Updated on every onCameraMove so the painter always has the live position.
-  CameraPosition _camera = _initialCamera;
+  // Pre-computed per-point constants (Mercator X/Y + base radius).
+  // Rebuilt only when the GPS points list changes — not on every camera frame.
+  List<_PointCache> _pointCache = const [];
 
   @override
   void dispose() {
+    _cameraNotifier.dispose();
     _controller?.dispose();
     super.dispose();
   }
 
-  Future<void> _goToMyLocation() async {
+  Future<void> _goToMyLocation({bool animate = true}) async {
     LatLng? target;
 
-    // Prefer the last point already tracked by the BLoC — instant, no I/O.
     final state = context.read<LocationBloc>().state;
     if (state is LocationTracking && state.points.isNotEmpty) {
       target = state.points.last;
     } else {
-      // Fallback: cached OS position (fast, no fresh GPS fix required).
       final pos = await Geolocator.getLastKnownPosition();
       if (pos != null) target = LatLng(pos.latitude, pos.longitude);
     }
 
     if (target != null) {
-      await _controller?.animateCamera(CameraUpdate.newLatLng(target));
+      final update = CameraUpdate.newLatLng(target);
+      if (animate) {
+        await _controller?.animateCamera(update);
+      } else {
+        await _controller?.moveCamera(update);
+      }
+    }
+  }
+
+  void _autoCenterOnce() {
+    if (_hasCenteredOnUser) return;
+    final state = context.read<LocationBloc>().state;
+    if (state is LocationTracking && _controller != null) {
+      _hasCenteredOnUser = true;
+      _goToMyLocation(animate: false);
     }
   }
 
   Future<void> _changeZoom(double delta) =>
       _controller?.animateCamera(CameraUpdate.zoomBy(delta)) ?? Future.value();
-
-  void _onSplashAnimationEnd() => setState(() => _showSplash = false);
 
   @override
   Widget build(BuildContext context) {
@@ -66,9 +78,14 @@ class _HomeViewState extends State<HomeView> {
       listener: (context, state) {
         if (state is LocationTracking) {
           setState(() {
-            _latLngPoints = state.points;
+            // Pre-compute Mercator coords and per-point base radius once here,
+            // not on every paint frame.
+            _pointCache = state.points
+                .map(_PointCache.fromLatLng)
+                .toList(growable: false);
             if (!_myLocationEnabled) _myLocationEnabled = true;
           });
+          _autoCenterOnce();
         } else if (state is LocationPermissionDenied) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -84,28 +101,33 @@ class _HomeViewState extends State<HomeView> {
         children: [
           GoogleMap(
             initialCameraPosition: _initialCamera,
-            onMapCreated: (controller) => _controller = controller,
-            // Update _camera on every frame of a pan/zoom gesture so the
-            // painter recomputes screen positions without any async calls.
-            onCameraMove: (pos) => setState(() => _camera = pos),
+            onMapCreated: (controller) {
+              _controller = controller;
+              _autoCenterOnce();
+            },
+            // Write directly into the ValueNotifier — no setState, no rebuild.
+            onCameraMove: (pos) => _cameraNotifier.value = pos,
             myLocationEnabled: _myLocationEnabled,
             myLocationButtonEnabled: false,
             zoomControlsEnabled: false,
             mapToolbarEnabled: false,
             rotateGesturesEnabled: false,
           ),
-          IgnorePointer(
-            child: CustomPaint(
-              size: Size.infinite,
-              painter: _FogOfWarPainter(
-                points: _latLngPoints,
-                camera: _camera,
-                fogColor: Colors.black.withValues(alpha: 0.72),
+          // RepaintBoundary promotes the fog overlay to its own compositing
+          // layer so its repaints never dirty sibling widgets.
+          RepaintBoundary(
+            child: IgnorePointer(
+              child: CustomPaint(
+                size: Size.infinite,
+                painter: _FogOfWarPainter(
+                  pointCache: _pointCache,
+                  cameraNotifier: _cameraNotifier,
+                  fogColor: Colors.black.withValues(alpha: 0.72),
+                ),
               ),
             ),
           ),
-          if (_showSplash)
-            SplashView(onAnimationEnd: _onSplashAnimationEnd),
+
           Positioned(
             right: 16,
             bottom: 48,
@@ -158,75 +180,112 @@ class _MapButton extends StatelessWidget {
   }
 }
 
-class _FogOfWarPainter extends CustomPainter {
-  const _FogOfWarPainter({
-    required this.points,
-    required this.camera,
-    required this.fogColor,
-  });
+// ---------------------------------------------------------------------------
+// Per-point pre-computed constants.
+// Built once when the points list changes; reused on every paint frame.
+// ---------------------------------------------------------------------------
 
-  final List<LatLng> points;
-  final CameraPosition camera;
-  final Color fogColor;
+final class _PointCache {
+  const _PointCache(this.mx, this.my, this.baseRadius);
+
+  // Normalised Web Mercator X/Y in [0, 1] — latitude/longitude never change.
+  final double mx;
+  final double my;
+
+  // baseRadius = _revealRadiusMeters / (156543.03392 * cos(lat)).
+  // Multiply by pow(2, zoom) at paint time to get the pixel radius.
+  // Hoisting cos(lat) here saves one trig call per point per frame.
+  final double baseRadius;
 
   static const _revealRadiusMeters = 15.0;
+
+  factory _PointCache.fromLatLng(LatLng p) {
+    final latRad = p.latitude * pi / 180.0;
+    final cosLat = cos(latRad);
+    return _PointCache(
+      (p.longitude + 180.0) / 360.0,
+      (1.0 - log(tan(latRad) + 1.0 / cosLat) / pi) / 2.0,
+      _revealRadiusMeters / (156543.03392 * cosLat),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Fog-of-war painter.
+// ---------------------------------------------------------------------------
+
+class _FogOfWarPainter extends CustomPainter {
+  _FogOfWarPainter({
+    required this.pointCache,
+    required this.cameraNotifier,
+    required this.fogColor,
+  }) : super(repaint: cameraNotifier);
+  // super(repaint:) subscribes the painter to the notifier, so it repaints
+  // automatically on every camera move without setState touching the tree.
+
+  final List<_PointCache> pointCache;
+  final ValueNotifier<CameraPosition> cameraNotifier;
+  final Color fogColor;
 
   @override
   void paint(Canvas canvas, Size size) {
     final fogPaint = Paint()..color = fogColor;
 
-    if (points.isEmpty) {
+    if (pointCache.isEmpty) {
       canvas.drawRect(Offset.zero & size, fogPaint);
       return;
     }
 
-    // Scale factor: total map width/height in pixels at this zoom level.
-    final scale = 256.0 * pow(2.0, camera.zoom);
+    final camera = cameraNotifier.value;
+    final zoomScale = pow(2.0, camera.zoom) as double;
+    final scale = 256.0 * zoomScale;
+
+    // Approximate reveal radius at camera latitude; bail out if sub-pixel.
+    final camLatRad = camera.target.latitude * pi / 180.0;
+    final approxRadius =
+        pointCache.first.baseRadius * zoomScale * cos(camLatRad);
+    if (approxRadius < 0.5) {
+      canvas.drawRect(Offset.zero & size, fogPaint);
+      return;
+    }
 
     // Camera centre in Mercator pixel space.
-    final cx = _mercatorX(camera.target.longitude) * scale;
-    final cy = _mercatorY(camera.target.latitude) * scale;
+    final cx = (camera.target.longitude + 180.0) / 360.0 * scale;
+    final cy =
+        (1.0 - log(tan(camLatRad) + 1.0 / cos(camLatRad)) / pi) / 2.0 * scale;
+
+    final hw = size.width / 2.0;
+    final hh = size.height / 2.0;
 
     canvas.saveLayer(Offset.zero & size, Paint());
     canvas.drawRect(Offset.zero & size, fogPaint);
 
+    // Crisp circle fills via BlendMode.clear — no MaskFilter.blur.
+    // Removing blur eliminates N full-screen GPU blur passes per frame,
+    // which was the primary cause of the freeze on large open areas.
     final holePaint = Paint()..blendMode = BlendMode.clear;
 
-    for (final point in points) {
-      // Point in Mercator pixel space → offset from camera centre → screen.
-      final px = _mercatorX(point.longitude) * scale;
-      final py = _mercatorY(point.latitude) * scale;
-      final center = Offset(
-        size.width / 2.0 + (px - cx),
-        size.height / 2.0 + (py - cy),
-      );
+    for (final p in pointCache) {
+      final radius = p.baseRadius * zoomScale;
+      final dx = hw + p.mx * scale - cx;
+      final dy = hh + p.my * scale - cy;
 
-      // Radius in logical pixels for the current zoom and latitude.
-      final metersPerPixel =
-          156543.03392 *
-          cos(point.latitude * pi / 180.0) /
-          pow(2.0, camera.zoom);
-      final radius = _revealRadiusMeters / metersPerPixel;
+      if (dx + radius < 0 ||
+          dx - radius > size.width ||
+          dy + radius < 0 ||
+          dy - radius > size.height) {
+        continue;
+      }
 
-      // Blur is capped at 10% of the reveal radius so it stays subtle at
-      // any zoom level and never dominates the visible cleared area.
-      holePaint.maskFilter = MaskFilter.blur(BlurStyle.normal, radius * 0.1);
-      canvas.drawCircle(center, radius, holePaint);
+      canvas.drawCircle(Offset(dx, dy), radius, holePaint);
     }
 
     canvas.restore();
   }
 
-  // Normalised Web Mercator X in [0, 1].
-  static double _mercatorX(double lng) => (lng + 180.0) / 360.0;
-
-  // Normalised Web Mercator Y in [0, 1].
-  static double _mercatorY(double lat) {
-    final latRad = lat * pi / 180.0;
-    return (1.0 - log(tan(latRad) + 1.0 / cos(latRad)) / pi) / 2.0;
-  }
-
   @override
   bool shouldRepaint(_FogOfWarPainter old) =>
-      old.points != points || old.camera != camera || old.fogColor != fogColor;
+      old.pointCache != pointCache ||
+      old.cameraNotifier != cameraNotifier ||
+      old.fogColor != fogColor;
 }
