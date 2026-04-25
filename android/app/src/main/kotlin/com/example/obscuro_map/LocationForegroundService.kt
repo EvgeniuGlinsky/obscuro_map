@@ -24,12 +24,20 @@ class LocationForegroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
-            ACTION_START -> startForeground(NOTIFICATION_ID, buildNotification())
-            ACTION_STOP -> {
+        if (intent?.action == ACTION_STOP) {
+            // Explicit stop requested by the app.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelf()
+            } else {
+                @Suppress("DEPRECATION") stopForeground(true)
             }
+            stopSelf()
+        } else {
+            // ACTION_START — or a null intent delivered by the system when it
+            // restarts a START_STICKY service after killing it. Both cases must
+            // call startForeground() within 5 s on Android 8+ or the OS will
+            // raise RemoteServiceException and kill the service immediately.
+            startForeground(NOTIFICATION_ID, buildNotification())
         }
         return START_STICKY
     }
@@ -69,7 +77,7 @@ class LocationForegroundService : Service() {
         return builder
             .setContentTitle("Obscuro Map")
             .setContentText("Tracking your route")
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(R.drawable.ic_notification) // monochrome alpha-mask vector
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .setCategory(Notification.CATEGORY_SERVICE)

@@ -9,9 +9,10 @@ final class LocationInitial extends LocationState {
 }
 
 final class LocationTracking extends LocationState {
-  const LocationTracking(this.points);
+  const LocationTracking(this.points, {this.fillPoints = const []});
 
   final List<LatLng> points;
+  final List<LatLng> fillPoints;
 }
 
 final class LocationPermissionDenied extends LocationState {
