@@ -190,9 +190,10 @@ class _HomeViewState extends State<HomeView> {
       Paint()..color = Colors.white,
     );
 
-    final image = await recorder
-        .endRecording()
-        .toImage(pixels.toInt(), pixels.toInt());
+    final image = await recorder.endRecording().toImage(
+      pixels.toInt(),
+      pixels.toInt(),
+    );
     final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
     final Uint8List bytes = byteData!.buffer.asUint8List();
     return BitmapDescriptor.bytes(
@@ -289,7 +290,9 @@ class _HomeViewState extends State<HomeView> {
     final out = <_RenderCell>[];
     for (final cell in stored) {
       final boundary = _h3.cellBoundary(cell);
-      final mercators = boundary.map(_MercatorPoint.fromLatLng).toList(
+      final mercators = boundary
+          .map(_MercatorPoint.fromLatLng)
+          .toList(
             growable: false,
           );
       out.add(_RenderCell(cell, mercators));
@@ -332,7 +335,8 @@ class _HomeViewState extends State<HomeView> {
     final mx = (pos.dx - size.width / 2.0 + cx) / scale;
     final my = (pos.dy - size.height / 2.0 + cy) / scale;
     final lng = mx * 360.0 - 180.0;
-    final lat = (2.0 * atan(exp(pi * (1.0 - 2.0 * my))) - pi / 2.0) * 180.0 / pi;
+    final lat =
+        (2.0 * atan(exp(pi * (1.0 - 2.0 * my))) - pi / 2.0) * 180.0 / pi;
     return LatLng(lat, lng);
   }
 
@@ -488,49 +492,71 @@ class _HomeViewState extends State<HomeView> {
               child: SignInButton(),
             ),
           ),
-          // Map controls — right edge, vertically centred (per design).
-          Positioned.fill(
-            right: kMapButtonsRightInset,
-            child: Align(
-              alignment: Alignment.centerRight,
+          // View controls — vertical column on the right edge, centred
+          // within the screen's lower half (Alignment.y = 0.5 is half-way
+          // between the centre and the bottom).
+          Align(
+            alignment: const Alignment(1.0, 0.7),
+            child: Padding(
+              padding: const EdgeInsets.only(right: kMapButtonsRightInset),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 spacing: kMapButtonsSpacing,
-              children: [
-                _MapButton(
-                  icon: _MapIcon.locate,
-                  onTap: _goToMyLocation,
-                ),
-                _MapButton(
-                  icon: _MapIcon.plus,
-                  onTap: () => _changeZoom(1),
-                ),
-                _MapButton(
-                  icon: _MapIcon.minus,
-                  onTap: () => _changeZoom(-1),
-                ),
-                _MapButton(
-                  icon: _MapIcon.erase,
-                  onTap: () => setState(() {
-                    _eraserActive = !_eraserActive;
-                    if (_eraserActive) _fillActive = false;
-                  }),
-                  isActive: _eraserActive,
-                ),
-                _MapButton(
-                  icon: _MapIcon.fill,
-                  onTap: () => setState(() {
-                    _fillActive = !_fillActive;
-                    if (_fillActive) _eraserActive = false;
-                  }),
-                  isActive: _fillActive,
-                ),
-                _MapButton(
-                  icon: _MapIcon.grid,
-                  onTap: _toggleGridOverlay,
-                  isActive: _gridOverlayEnabled,
-                ),
+                children: [
+                  _MapButton(
+                    icon: _MapIcon.locate,
+                    onTap: _goToMyLocation,
+                  ),
+                  _MapButton(
+                    icon: _MapIcon.plus,
+                    onTap: () => _changeZoom(1),
+                  ),
+                  _MapButton(
+                    icon: _MapIcon.minus,
+                    onTap: () => _changeZoom(-1),
+                  ),
                 ],
+              ),
+            ),
+          ),
+          // Tools — horizontal row anchored at the bottom, centred.
+          // SafeArea keeps it clear of the gesture-nav bar / home
+          // indicator on devices that have one.
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  spacing: kMapButtonsSpacing,
+                  children: [
+                    _MapButton(
+                      icon: _MapIcon.erase,
+                      onTap: () => setState(() {
+                        _eraserActive = !_eraserActive;
+                        if (_eraserActive) _fillActive = false;
+                      }),
+                      isActive: _eraserActive,
+                    ),
+                    _MapButton(
+                      icon: _MapIcon.fill,
+                      onTap: () => setState(() {
+                        _fillActive = !_fillActive;
+                        if (_fillActive) _eraserActive = false;
+                      }),
+                      isActive: _fillActive,
+                    ),
+                    _MapButton(
+                      icon: _MapIcon.grid,
+                      onTap: _toggleGridOverlay,
+                      isActive: _gridOverlayEnabled,
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -555,8 +581,7 @@ class _MapButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final iconColor =
-        isActive ? kMapButtonActiveIcon : kMapButtonInactiveIcon;
+    final iconColor = isActive ? kMapButtonActiveIcon : kMapButtonInactiveIcon;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
@@ -568,9 +593,7 @@ class _MapButton extends StatelessWidget {
           color: isActive ? null : kMapButtonInactiveBg,
           gradient: isActive ? kMapButtonActiveGradient : null,
           border: Border.all(
-            color: isActive
-                ? kMapButtonActiveBorder
-                : kMapButtonInactiveBorder,
+            color: isActive ? kMapButtonActiveBorder : kMapButtonInactiveBorder,
             width: 1,
           ),
           boxShadow: isActive
@@ -650,7 +673,11 @@ class _MapIconPainter extends CustomPainter {
           ..close();
         canvas.drawPath(body, stroke);
         // Lid line.
-        canvas.drawLine(const Offset(2.5, 6.5), const Offset(17.5, 6.5), stroke);
+        canvas.drawLine(
+          const Offset(2.5, 6.5),
+          const Offset(17.5, 6.5),
+          stroke,
+        );
         // Handle:  M7.5 6.5V4.5h5v2
         final handle = Path()
           ..moveTo(7.5, 6.5)
@@ -760,6 +787,7 @@ class _EraserCirclePainter extends CustomPainter {
 
 final class _MercatorPoint {
   const _MercatorPoint(this.mx, this.my);
+
   final double mx;
   final double my;
 
@@ -774,6 +802,7 @@ final class _MercatorPoint {
 
 final class _RenderCell {
   const _RenderCell(this.index, this.boundary);
+
   final HexIndex index;
   final List<_MercatorPoint> boundary;
 }
@@ -800,12 +829,12 @@ class _FogOfWarPainter extends CustomPainter {
     required this.gridCellsNotifier,
     required this.cameraNotifier,
     required this.fogColor,
-  })  : _fogPaint = Paint()..color = fogColor,
-        super(
-          repaint: Listenable.merge(
-            [cellsNotifier, gridCellsNotifier, cameraNotifier],
-          ),
-        );
+  }) : _fogPaint = Paint()..color = fogColor,
+       super(
+         repaint: Listenable.merge(
+           [cellsNotifier, gridCellsNotifier, cameraNotifier],
+         ),
+       );
 
   final ValueNotifier<List<_RenderCell>> cellsNotifier;
   final ValueNotifier<List<_RenderCell>> gridCellsNotifier;
