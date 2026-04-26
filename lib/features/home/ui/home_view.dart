@@ -1,4 +1,6 @@
 import 'dart:math';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -12,6 +14,8 @@ import '../../../core/di/get_it.dart';
 import '../../../core/hex/grid_lod.dart';
 import '../../../core/hex/h3_service.dart';
 import '../../../core/hex/hex_index.dart';
+import '../../../core/theme/design_tokens.dart';
+import '../../../core/theme/map_style.dart';
 import '../../auth/ui/sign_in_button.dart';
 import '../bloc/location_bloc.dart';
 import '../bloc/location_event.dart';
@@ -32,7 +36,6 @@ class _HomeViewState extends State<HomeView> {
   );
 
   GoogleMapController? _controller;
-  bool _myLocationEnabled = false;
   bool _hasCenteredOnUser = false;
   bool _eraserActive = false;
   bool _fillActive = false;
@@ -46,6 +49,15 @@ class _HomeViewState extends State<HomeView> {
   final _renderCellsNotifier = ValueNotifier<List<_RenderCell>>(const []);
   final _gridCellsNotifier = ValueNotifier<List<_RenderCell>>(const []);
   final _eraserPositionNotifier = ValueNotifier<Offset?>(null);
+
+  // User-location marker — bitmap is rendered once after the first frame
+  // (we need devicePixelRatio from MediaQuery), then the position is
+  // pushed into [_userMarkerNotifier] on every bloc emission so the
+  // GoogleMap rebuilds via ValueListenableBuilder rather than via setState
+  // on this widget.
+  final _userMarkerNotifier = ValueNotifier<Set<Marker>>(const {});
+  BitmapDescriptor? _userMarkerIcon;
+  HexIndex? _pendingUserMarkerCell;
 
   // Identity-cache of the last cell-set the painter was built from. Lets
   // us skip the polygon rebuild on bloc emissions that didn't actually
@@ -79,6 +91,14 @@ class _HomeViewState extends State<HomeView> {
     // this well under one-frame budget; the listener no-ops when the
     // overlay is off.
     _cameraNotifier.addListener(_onCameraChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final ratio = MediaQuery.maybeDevicePixelRatioOf(context) ?? 3.0;
+      _userMarkerIcon = await _buildUserMarkerIcon(ratio);
+      // If a position arrived while the bitmap was being built, mount it.
+      if (_pendingUserMarkerCell != null) {
+        _setUserMarkerCell(_pendingUserMarkerCell!);
+      }
+    });
   }
 
   @override
@@ -88,8 +108,97 @@ class _HomeViewState extends State<HomeView> {
     _renderCellsNotifier.dispose();
     _gridCellsNotifier.dispose();
     _eraserPositionNotifier.dispose();
+    _userMarkerNotifier.dispose();
     _controller?.dispose();
     super.dispose();
+  }
+
+  void _setUserMarkerCell(HexIndex cell) {
+    if (_userMarkerIcon == null) {
+      // Bitmap not ready yet — remember the latest cell, mount when it is.
+      _pendingUserMarkerCell = cell;
+      return;
+    }
+    final pos = _h3.cellToLatLng(cell);
+    _userMarkerNotifier.value = {
+      Marker(
+        markerId: const MarkerId('user'),
+        position: pos,
+        icon: _userMarkerIcon!,
+        anchor: const Offset(0.5, 0.5),
+        flat: true,
+        zIndexInt: 999,
+      ),
+    };
+  }
+
+  /// Renders the user-location marker bitmap once on app start.
+  /// Composition matches the design hand-off:
+  ///   * outer glow — radius 34, radial gradient #9D8FCC 0.55 → 0
+  ///   * ring — radius 13, fill rgba(107,90,155,0.22), stroke
+  ///     rgba(193,189,210,0.35) at 1.5pt
+  ///   * inner dot — radius 6, fill #9D8FCC
+  ///   * white centre — radius 3
+  /// Total icon area sized to fit the glow with comfortable padding.
+  Future<BitmapDescriptor> _buildUserMarkerIcon(double pixelRatio) async {
+    const double logical = 80; // logical pt edge of the bitmap
+    final double pixels = logical * pixelRatio;
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    canvas.scale(pixelRatio);
+
+    const centre = Offset(logical / 2, logical / 2);
+
+    // Glow.
+    final glowRect = Rect.fromCircle(center: centre, radius: 34);
+    canvas.drawCircle(
+      centre,
+      34,
+      Paint()
+        ..shader = const RadialGradient(
+          colors: [
+            Color.fromRGBO(157, 143, 204, 0.55),
+            Color.fromRGBO(157, 143, 204, 0.0),
+          ],
+        ).createShader(glowRect),
+    );
+    // Ring fill.
+    canvas.drawCircle(
+      centre,
+      13,
+      Paint()..color = const Color.fromRGBO(107, 90, 155, 0.22),
+    );
+    // Ring stroke.
+    canvas.drawCircle(
+      centre,
+      13,
+      Paint()
+        ..color = const Color.fromRGBO(193, 189, 210, 0.35)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5,
+    );
+    // Inner purple dot.
+    canvas.drawCircle(
+      centre,
+      6,
+      Paint()..color = kColorPurpleMid,
+    );
+    // White centre.
+    canvas.drawCircle(
+      centre,
+      3,
+      Paint()..color = Colors.white,
+    );
+
+    final image = await recorder
+        .endRecording()
+        .toImage(pixels.toInt(), pixels.toInt());
+    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+    final Uint8List bytes = byteData!.buffer.asUint8List();
+    return BitmapDescriptor.bytes(
+      bytes,
+      imagePixelRatio: pixelRatio,
+    );
   }
 
   void _onCameraChanged() {
@@ -287,8 +396,8 @@ class _HomeViewState extends State<HomeView> {
         _lastCells = state.cells;
         _rebuildRenderCells(state.cells);
       }
-      if (!_myLocationEnabled) {
-        setState(() => _myLocationEnabled = true);
+      if (state.lastCell != null) {
+        _setUserMarkerCell(state.lastCell!);
       }
       _autoCenterOnce();
     } else if (state is LocationPermissionDenied) {
@@ -308,21 +417,31 @@ class _HomeViewState extends State<HomeView> {
       listener: (_, state) => _onLocationState(state),
       child: Stack(
         children: [
-          GoogleMap(
-            initialCameraPosition: _initialCamera,
-            onMapCreated: (controller) {
-              _controller = controller;
-              _autoCenterOnce();
-            },
-            onCameraMove: (pos) => _cameraNotifier.value = pos,
-            myLocationEnabled: _myLocationEnabled,
-            myLocationButtonEnabled: false,
-            zoomControlsEnabled: false,
-            mapToolbarEnabled: false,
-            rotateGesturesEnabled: false,
-            scrollGesturesEnabled: mapInteractive,
-            zoomGesturesEnabled: mapInteractive,
-            tiltGesturesEnabled: mapInteractive,
+          // Wrap GoogleMap so marker updates rebuild only this subtree
+          // (not the whole HomeView, which would also dirty the painter
+          // RepaintBoundaries).
+          ValueListenableBuilder<Set<Marker>>(
+            valueListenable: _userMarkerNotifier,
+            builder: (_, markers, _) => GoogleMap(
+              initialCameraPosition: _initialCamera,
+              style: kMapStyleJson,
+              onMapCreated: (controller) {
+                _controller = controller;
+                _autoCenterOnce();
+              },
+              onCameraMove: (pos) => _cameraNotifier.value = pos,
+              // Custom purple marker replaces Google's blue dot so the
+              // user-location indicator matches the design hand-off.
+              myLocationEnabled: false,
+              myLocationButtonEnabled: false,
+              zoomControlsEnabled: false,
+              mapToolbarEnabled: false,
+              rotateGesturesEnabled: false,
+              scrollGesturesEnabled: mapInteractive,
+              zoomGesturesEnabled: mapInteractive,
+              tiltGesturesEnabled: mapInteractive,
+              markers: markers,
+            ),
           ),
           RepaintBoundary(
             child: IgnorePointer(
@@ -358,42 +477,40 @@ class _HomeViewState extends State<HomeView> {
               ),
             ),
           ],
+          // Sign-in pill: 66pt from the top of the screen, horizontally
+          // centred, exactly per the design handoff.
           const Positioned(
-            top: 0,
+            top: kSignInPillTopOffset,
             left: 0,
             right: 0,
-            child: SafeArea(
-              bottom: false,
-              child: Padding(
-                padding: EdgeInsets.only(top: 12),
-                child: Align(
-                  alignment: Alignment.topCenter,
-                  child: SignInButton(),
-                ),
-              ),
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: SignInButton(),
             ),
           ),
-          Positioned(
+          // Map controls — right edge, vertically centred (per design).
+          Positioned.fill(
             right: kMapButtonsRightInset,
-            bottom: kMapButtonsBottomInset,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              spacing: kMapButtonsSpacing,
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                spacing: kMapButtonsSpacing,
               children: [
                 _MapButton(
-                  icon: Icons.my_location,
+                  icon: _MapIcon.locate,
                   onTap: _goToMyLocation,
                 ),
                 _MapButton(
-                  icon: Icons.add,
+                  icon: _MapIcon.plus,
                   onTap: () => _changeZoom(1),
                 ),
                 _MapButton(
-                  icon: Icons.remove,
+                  icon: _MapIcon.minus,
                   onTap: () => _changeZoom(-1),
                 ),
                 _MapButton(
-                  icon: Icons.auto_fix_normal,
+                  icon: _MapIcon.erase,
                   onTap: () => setState(() {
                     _eraserActive = !_eraserActive;
                     if (_eraserActive) _fillActive = false;
@@ -401,7 +518,7 @@ class _HomeViewState extends State<HomeView> {
                   isActive: _eraserActive,
                 ),
                 _MapButton(
-                  icon: Icons.water_drop_outlined,
+                  icon: _MapIcon.fill,
                   onTap: () => setState(() {
                     _fillActive = !_fillActive;
                     if (_fillActive) _eraserActive = false;
@@ -409,11 +526,12 @@ class _HomeViewState extends State<HomeView> {
                   isActive: _fillActive,
                 ),
                 _MapButton(
-                  icon: Icons.grid_on,
+                  icon: _MapIcon.grid,
                   onTap: _toggleGridOverlay,
                   isActive: _gridOverlayEnabled,
                 ),
-              ],
+                ],
+              ),
             ),
           ),
         ],
@@ -422,6 +540,8 @@ class _HomeViewState extends State<HomeView> {
   }
 }
 
+enum _MapIcon { locate, plus, minus, erase, fill, grid }
+
 class _MapButton extends StatelessWidget {
   const _MapButton({
     required this.icon,
@@ -429,30 +549,171 @@ class _MapButton extends StatelessWidget {
     this.isActive = false,
   });
 
-  final IconData icon;
+  final _MapIcon icon;
   final VoidCallback onTap;
   final bool isActive;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: isActive ? Colors.red.shade700 : Colors.white,
-      shape: const CircleBorder(),
-      elevation: 4,
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: onTap,
-        child: Padding(
-          padding: kMapButtonPadding,
-          child: Icon(
-            icon,
-            size: kMapButtonIconSize,
-            color: isActive ? Colors.white : Colors.black87,
+    final iconColor =
+        isActive ? kMapButtonActiveIcon : kMapButtonInactiveIcon;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        width: kMapButtonSize,
+        height: kMapButtonSize,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: isActive ? null : kMapButtonInactiveBg,
+          gradient: isActive ? kMapButtonActiveGradient : null,
+          border: Border.all(
+            color: isActive
+                ? kMapButtonActiveBorder
+                : kMapButtonInactiveBorder,
+            width: 1,
           ),
+          boxShadow: isActive
+              ? kMapButtonActiveShadow
+              : kMapButtonInactiveShadow,
+        ),
+        child: CustomPaint(
+          painter: _MapIconPainter(icon: icon, color: iconColor),
         ),
       ),
     );
   }
+}
+
+/// Renders the panel-button icons exactly as defined in the design's SVGs
+/// (see `lib/new_design/Obscuro Map Design.html`, `ICONS` map). The native
+/// Material icons aren't a close enough match for the hi-fi handoff —
+/// stroke widths, end-caps and proportions all differ — so we paint the
+/// paths directly.
+class _MapIconPainter extends CustomPainter {
+  _MapIconPainter({required this.icon, required this.color});
+
+  final _MapIcon icon;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // All source icons are designed in a 20–22 pt viewBox; centre on the
+    // 48-pt button and scale uniformly.
+    const double sourceSize = 22;
+    final scale = (size.shortestSide * (sourceSize / 48.0)) / sourceSize;
+    canvas.save();
+    canvas.translate(
+      (size.width - sourceSize * scale) / 2,
+      (size.height - sourceSize * scale) / 2,
+    );
+    canvas.scale(scale);
+
+    final stroke = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    switch (icon) {
+      case _MapIcon.locate:
+        // Crosshair on a 22×22 viewBox.
+        stroke.strokeWidth = 2.0;
+        canvas.drawCircle(const Offset(11, 11), 4, stroke);
+        canvas.drawLine(const Offset(11, 1.5), const Offset(11, 5.5), stroke);
+        canvas.drawLine(const Offset(11, 16.5), const Offset(11, 20.5), stroke);
+        canvas.drawLine(const Offset(1.5, 11), const Offset(5.5, 11), stroke);
+        canvas.drawLine(const Offset(16.5, 11), const Offset(20.5, 11), stroke);
+        break;
+      case _MapIcon.plus:
+        // Source viewBox is 20×20. Offset to centre inside the 22 frame.
+        canvas.translate(1, 1);
+        stroke.strokeWidth = 2.2;
+        canvas.drawLine(const Offset(10, 3), const Offset(10, 17), stroke);
+        canvas.drawLine(const Offset(3, 10), const Offset(17, 10), stroke);
+        break;
+      case _MapIcon.minus:
+        canvas.translate(1, 1);
+        stroke.strokeWidth = 2.2;
+        canvas.drawLine(const Offset(4, 10), const Offset(16, 10), stroke);
+        break;
+      case _MapIcon.erase:
+        // Trash can. Source viewBox 20×20.
+        canvas.translate(1, 1);
+        stroke.strokeWidth = 1.7;
+        // Body:  M4 6.5h12l-1.1 10H5.1L4 6.5z
+        final body = Path()
+          ..moveTo(4, 6.5)
+          ..relativeLineTo(12, 0)
+          ..lineTo(14.9, 16.5)
+          ..lineTo(5.1, 16.5)
+          ..close();
+        canvas.drawPath(body, stroke);
+        // Lid line.
+        canvas.drawLine(const Offset(2.5, 6.5), const Offset(17.5, 6.5), stroke);
+        // Handle:  M7.5 6.5V4.5h5v2
+        final handle = Path()
+          ..moveTo(7.5, 6.5)
+          ..lineTo(7.5, 4.5)
+          ..lineTo(12.5, 4.5)
+          ..lineTo(12.5, 6.5);
+        canvas.drawPath(handle, stroke);
+        break;
+      case _MapIcon.fill:
+        // Paint-drop + brush stem. Source viewBox 20×20.
+        canvas.translate(1, 1);
+        stroke.strokeWidth = 1.7;
+        // Drop:
+        // M13.5 14C13.5 15.8 12.4 17 11 17 C9.6 17 8.5 15.8 8.5 14
+        // C8.5 11.8 11 8 11 8 C11 8 13.5 11.8 13.5 14Z
+        final drop = Path()
+          ..moveTo(13.5, 14)
+          ..cubicTo(13.5, 15.8, 12.4, 17, 11, 17)
+          ..cubicTo(9.6, 17, 8.5, 15.8, 8.5, 14)
+          ..cubicTo(8.5, 11.8, 11, 8, 11, 8)
+          ..cubicTo(11, 8, 13.5, 11.8, 13.5, 14)
+          ..close();
+        canvas.drawPath(drop, stroke);
+        // Brush stem: M3.5 3 L 12 11.5
+        canvas.drawLine(const Offset(3.5, 3), const Offset(12, 11.5), stroke);
+        // Brush head.
+        stroke.strokeWidth = 1.6;
+        final head = Path()
+          ..moveTo(3.5, 3)
+          ..quadraticBezierTo(5.5, 1, 7.5, 3)
+          ..quadraticBezierTo(9.5, 5, 7.5, 7)
+          ..close();
+        canvas.drawPath(head, stroke);
+        break;
+      case _MapIcon.grid:
+        // Hexagon with 3 internal cross-lines. Source viewBox 21×21.
+        canvas.translate(0.5, 0.5);
+        stroke.strokeWidth = 1.7;
+        final hex = Path()
+          ..moveTo(10.5, 2)
+          ..lineTo(17, 6)
+          ..lineTo(17, 14)
+          ..lineTo(10.5, 18)
+          ..lineTo(4, 14)
+          ..lineTo(4, 6)
+          ..close();
+        canvas.drawPath(hex, stroke);
+        final inner = Paint()
+          ..color = color.withValues(alpha: color.a * 0.7)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 0.9
+          ..strokeCap = StrokeCap.round;
+        canvas.drawLine(const Offset(4, 6), const Offset(17, 6), inner);
+        canvas.drawLine(const Offset(4, 14), const Offset(17, 14), inner);
+        canvas.drawLine(const Offset(10.5, 2), const Offset(10.5, 18), inner);
+        break;
+    }
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(_MapIconPainter old) =>
+      old.icon != icon || old.color != color;
 }
 
 // ---------------------------------------------------------------------------
@@ -557,12 +818,12 @@ class _FogOfWarPainter extends CustomPainter {
     ..blendMode = BlendMode.clear
     ..style = PaintingStyle.fill;
   final Paint _outlinePaint = Paint()
-    ..color = Colors.black.withValues(alpha: kHexOutlineOpacity)
+    ..color = kColorExploredHexOutline
     ..style = PaintingStyle.stroke
     ..strokeWidth = kHexOutlineWidth
     ..strokeJoin = StrokeJoin.round;
   final Paint _gridPaint = Paint()
-    ..color = Colors.white.withValues(alpha: kHexGridOverlayOpacity)
+    ..color = kColorUnexploredHexOutline
     ..style = PaintingStyle.stroke
     ..strokeWidth = kHexGridOverlayWidth
     ..strokeJoin = StrokeJoin.round;

@@ -1,4 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Solid lavender fill behind the launcher icon's foreground.
+         Matches `kColorPurpleLight` in lib/core/theme/design_tokens.dart
+         so the icon reads as a brighter, more inviting tile in the app
+         drawer (the dark pin lifts off it nicely). -->
     <color name="ic_launcher_background">#C1BDD2</color>
+
+    <!-- Cold-start window background. Painted by Android while the
+         process is launching, before Flutter has rendered the first
+         frame. Matches the top stop of `SplashView`'s gradient
+         (#13101F → #0D0B18 → #111626) so the transition into the
+         Flutter splash is invisible. -->
+    <color name="splash_background">#0D0B18</color>
 </resources>

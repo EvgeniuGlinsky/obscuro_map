@@ -20,7 +20,14 @@
       "Bash(rmdir \"C:/workspace/lib/features/splash/ui\")",
       "Bash(rmdir \"C:/workspace/lib/features/splash\")",
       "Bash(xargs grep *)",
-      "WebFetch(domain:support.claude.com)"
+      "WebFetch(domain:support.claude.com)",
+      "Bash(cp \"C:/workspace/lib/new_design/android_icons/mipmap-mdpi/ic_launcher.png\"   \"C:/workspace/android/app/src/main/res/mipmap-mdpi/ic_launcher.png\")",
+      "Bash(cp \"C:/workspace/lib/new_design/android_icons/mipmap-hdpi/ic_launcher.png\"   \"C:/workspace/android/app/src/main/res/mipmap-hdpi/ic_launcher.png\")",
+      "Bash(cp \"C:/workspace/lib/new_design/android_icons/mipmap-xhdpi/ic_launcher.png\"  \"C:/workspace/android/app/src/main/res/mipmap-xhdpi/ic_launcher.png\")",
+      "Bash(cp \"C:/workspace/lib/new_design/android_icons/mipmap-xxhdpi/ic_launcher.png\" \"C:/workspace/android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png\")",
+      "Bash(cp \"C:/workspace/lib/new_design/android_icons/mipmap-xxxhdpi/ic_launcher.png\" \"C:/workspace/android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png\")",
+      "Bash(rm \"C:/workspace/android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml\")",
+      "Bash(rmdir \"C:/workspace/android/app/src/main/res/mipmap-anydpi-v26\")"
     ]
   }
 }

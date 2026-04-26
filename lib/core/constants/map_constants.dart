@@ -24,12 +24,8 @@ const kEarthRadiusMeters = 6371000.0;
 // a quality-of-data filter rather than a correctness one.
 const kLocationDistanceFilterMeters = 5;
 
-// Subtle hex-grid outline colour applied to revealed cells. Alpha kept low
-// so the cleared map remains the dominant visual.
-const kHexOutlineOpacity = 0.18;
-const kHexOutlineWidth = 0.6;
-
-// Reference grid (over fog) — a touch lighter so it reads as a hint of the
-// upcoming lattice rather than competing with revealed-cell outlines.
-const kHexGridOverlayOpacity = 0.45;
-const kHexGridOverlayWidth = 0.6;
+// Hex-grid outline widths. Colours come from `design_tokens.dart` —
+// `kColorExploredHexOutline` (alpha 0.28) and `kColorUnexploredHexOutline`
+// (alpha 0.15) — so the look matches the Obscuro Map handoff.
+const kHexOutlineWidth = 1.0;
+const kHexGridOverlayWidth = 1.0;

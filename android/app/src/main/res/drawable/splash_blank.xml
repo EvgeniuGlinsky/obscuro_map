@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fully transparent drawable used as the SplashScreen API icon
+     (Android 12+) so the system splash shows only our colour and no
+     launcher-icon overlay. Pointed at by `windowSplashScreenAnimatedIcon`
+     in res/values-v31/styles.xml and res/values-night-v31/styles.xml. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@android:color/transparent"/>
+</shape>
