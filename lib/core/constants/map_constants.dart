@@ -28,3 +28,8 @@ const kLocationDistanceFilterMeters = 5;
 // so the cleared map remains the dominant visual.
 const kHexOutlineOpacity = 0.18;
 const kHexOutlineWidth = 0.6;
+
+// Reference grid (over fog) — a touch lighter so it reads as a hint of the
+// upcoming lattice rather than competing with revealed-cell outlines.
+const kHexGridOverlayOpacity = 0.45;
+const kHexGridOverlayWidth = 0.6;

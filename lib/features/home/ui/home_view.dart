@@ -9,6 +9,7 @@ import '../../../core/constants/app_strings.dart';
 import '../../../core/constants/map_constants.dart';
 import '../../../core/constants/ui_constants.dart';
 import '../../../core/di/get_it.dart';
+import '../../../core/hex/grid_lod.dart';
 import '../../../core/hex/h3_service.dart';
 import '../../../core/hex/hex_index.dart';
 import '../../auth/ui/sign_in_button.dart';
@@ -35,6 +36,7 @@ class _HomeViewState extends State<HomeView> {
   bool _hasCenteredOnUser = false;
   bool _eraserActive = false;
   bool _fillActive = false;
+  bool _gridOverlayEnabled = false;
 
   final _h3 = getIt<H3Service>();
 
@@ -42,12 +44,19 @@ class _HomeViewState extends State<HomeView> {
   // dirty the widget tree.
   final _cameraNotifier = ValueNotifier<CameraPosition>(_initialCamera);
   final _renderCellsNotifier = ValueNotifier<List<_RenderCell>>(const []);
+  final _gridCellsNotifier = ValueNotifier<List<_RenderCell>>(const []);
   final _eraserPositionNotifier = ValueNotifier<Offset?>(null);
 
   // Identity-cache of the last cell-set the painter was built from. Lets
   // us skip the polygon rebuild on bloc emissions that didn't actually
   // change membership.
   Set<HexIndex>? _lastCells;
+
+  // Per-cell boundary cache for the grid overlay. Cells re-entering the
+  // viewport during pan reuse their projected vertices instead of crossing
+  // the FFI boundary again. Cleared on every resolution change.
+  final Map<HexIndex, List<_MercatorPoint>> _gridBoundaryCache = {};
+  int _gridCachedResolution = -1;
 
   late final _FogOfWarPainter _fogPainter;
   late final _EraserCirclePainter _eraserPainter;
@@ -57,6 +66,7 @@ class _HomeViewState extends State<HomeView> {
     super.initState();
     _fogPainter = _FogOfWarPainter(
       cellsNotifier: _renderCellsNotifier,
+      gridCellsNotifier: _gridCellsNotifier,
       cameraNotifier: _cameraNotifier,
       fogColor: kFogColor,
     );
@@ -64,15 +74,99 @@ class _HomeViewState extends State<HomeView> {
       positionNotifier: _eraserPositionNotifier,
       cameraNotifier: _cameraNotifier,
     );
+    // The grid overlay polygon depends on viewport, so recompute on every
+    // camera change. The boundary cache + cheap polygonToCells FFI keep
+    // this well under one-frame budget; the listener no-ops when the
+    // overlay is off.
+    _cameraNotifier.addListener(_onCameraChanged);
   }
 
   @override
   void dispose() {
+    _cameraNotifier.removeListener(_onCameraChanged);
     _cameraNotifier.dispose();
     _renderCellsNotifier.dispose();
+    _gridCellsNotifier.dispose();
     _eraserPositionNotifier.dispose();
     _controller?.dispose();
     super.dispose();
+  }
+
+  void _onCameraChanged() {
+    if (!_gridOverlayEnabled) return;
+    _rebuildGridCells();
+  }
+
+  void _rebuildGridCells() {
+    if (!_gridOverlayEnabled) {
+      if (_gridCellsNotifier.value.isNotEmpty) {
+        _gridCellsNotifier.value = const [];
+      }
+      return;
+    }
+    final cam = _cameraNotifier.value;
+    final res = pickGridResolution(cam.zoom);
+    if (res != _gridCachedResolution) {
+      _gridBoundaryCache.clear();
+      _gridCachedResolution = res;
+    }
+
+    // At coarse resolutions the viewport polygon wraps the world or runs
+    // past ±85° latitude where Mercator is undefined — `polygonToCells`
+    // returns nothing or partial results. Enumerate globally instead;
+    // the painter then culls everything off-screen.
+    final List<HexIndex> indices;
+    if (res <= kGridGlobalEnumerationMaxResolution) {
+      indices = _h3.allCellsAtResolution(res);
+    } else {
+      final perimeter = _viewportPolygon();
+      if (perimeter == null) return;
+      indices = _h3.cellsInPolygon(perimeter, res);
+    }
+
+    final out = List<_RenderCell>.generate(indices.length, (i) {
+      final cell = indices[i];
+      final cached = _gridBoundaryCache[cell];
+      if (cached != null) return _RenderCell(cell, cached);
+      final boundary = _h3
+          .cellBoundary(cell)
+          .map(_MercatorPoint.fromLatLng)
+          .toList(growable: false);
+      _gridBoundaryCache[cell] = boundary;
+      return _RenderCell(cell, boundary);
+    }, growable: false);
+    _gridCellsNotifier.value = out;
+  }
+
+  /// Lat/lng polygon enclosing the visible viewport, with a small margin so
+  /// cells just past the screen edge are also fetched (lets the user pan
+  /// briefly without a stutter while waiting for the next rebuild).
+  /// Returns `null` before the first frame, when MediaQuery has no size.
+  List<LatLng>? _viewportPolygon() {
+    final size = MediaQuery.maybeSizeOf(context);
+    if (size == null || size.isEmpty) return null;
+    const padFactor = 1.25;
+    final padX = size.width * (padFactor - 1.0) / 2.0;
+    final padY = size.height * (padFactor - 1.0) / 2.0;
+    return [
+      _screenToLatLng(Offset(-padX, -padY)),
+      _screenToLatLng(Offset(-padX, size.height + padY)),
+      _screenToLatLng(Offset(size.width + padX, size.height + padY)),
+      _screenToLatLng(Offset(size.width + padX, -padY)),
+    ];
+  }
+
+  void _toggleGridOverlay() {
+    setState(() {
+      _gridOverlayEnabled = !_gridOverlayEnabled;
+    });
+    if (_gridOverlayEnabled) {
+      _rebuildGridCells();
+    } else {
+      _gridCellsNotifier.value = const [];
+      _gridBoundaryCache.clear();
+      _gridCachedResolution = -1;
+    }
   }
 
   void _rebuildRenderCells(Set<HexIndex> stored) {
@@ -314,6 +408,11 @@ class _HomeViewState extends State<HomeView> {
                   }),
                   isActive: _fillActive,
                 ),
+                _MapButton(
+                  icon: Icons.grid_on,
+                  onTap: _toggleGridOverlay,
+                  isActive: _gridOverlayEnabled,
+                ),
               ],
             ),
           ),
@@ -421,22 +520,34 @@ final class _RenderCell {
 // ---------------------------------------------------------------------------
 // Fog-of-war painter.
 //
-// One filled polygon per render-resolution cell, drawn with BlendMode.clear
-// against an opaque fog rect. A subtle stroke is drawn on top of each cell
-// to give the explored area a Civ-VI-style hex-mosaic texture.
+// Compositing strategy (one saveLayer per frame):
+//   1. Draw opaque fog over the whole canvas.
+//   2. If the user has toggled the grid overlay on, stroke the reference
+//      lattice for cells visible in the viewport. These strokes sit on top
+//      of fog inside the layer.
+//   3. Punch out explored cells with BlendMode.clear — this erases both fog
+//      AND the grid lines wherever the user has explored, so the lattice
+//      only ever shows on unexplored area.
+//   4. Restore the layer (composites fog+grid+holes onto the canvas).
+//   5. Stroke the explored-cell outlines on top — gives the cleared area a
+//      hex-mosaic texture (Civ VI vibe).
 // ---------------------------------------------------------------------------
 
 class _FogOfWarPainter extends CustomPainter {
   _FogOfWarPainter({
     required this.cellsNotifier,
+    required this.gridCellsNotifier,
     required this.cameraNotifier,
     required this.fogColor,
   })  : _fogPaint = Paint()..color = fogColor,
         super(
-          repaint: Listenable.merge([cellsNotifier, cameraNotifier]),
+          repaint: Listenable.merge(
+            [cellsNotifier, gridCellsNotifier, cameraNotifier],
+          ),
         );
 
   final ValueNotifier<List<_RenderCell>> cellsNotifier;
+  final ValueNotifier<List<_RenderCell>> gridCellsNotifier;
   final ValueNotifier<CameraPosition> cameraNotifier;
   final Color fogColor;
 
@@ -450,11 +561,18 @@ class _FogOfWarPainter extends CustomPainter {
     ..style = PaintingStyle.stroke
     ..strokeWidth = kHexOutlineWidth
     ..strokeJoin = StrokeJoin.round;
+  final Paint _gridPaint = Paint()
+    ..color = Colors.white.withValues(alpha: kHexGridOverlayOpacity)
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = kHexGridOverlayWidth
+    ..strokeJoin = StrokeJoin.round;
 
   @override
   void paint(Canvas canvas, Size size) {
     final cells = cellsNotifier.value;
-    if (cells.isEmpty) {
+    final gridCells = gridCellsNotifier.value;
+
+    if (cells.isEmpty && gridCells.isEmpty) {
       canvas.drawRect(Offset.zero & size, _fogPaint);
       return;
     }
@@ -469,26 +587,81 @@ class _FogOfWarPainter extends CustomPainter {
     final hw = size.width / 2.0;
     final hh = size.height / 2.0;
 
-    canvas.saveLayer(Offset.zero & size, _layerPaint);
-    canvas.drawRect(Offset.zero & size, _fogPaint);
-
-    // Cull cells whose bounding box is fully off-screen. Cheap pre-projection
-    // bounds check using the first vertex's projected position is "good
-    // enough" — false positives just incur a polygon construction.
     final clipPad = 64.0; // px slack so cells straddling the edge still draw
     final left = -clipPad;
     final right = size.width + clipPad;
     final top = -clipPad;
     final bottom = size.height + clipPad;
 
+    // Build the explored cells' clear-fill path and a matching outline path.
     final clearPath = Path()..fillType = PathFillType.nonZero;
     final outlinePath = Path();
+    _appendCellsToPath(
+      cells: cells,
+      hw: hw,
+      hh: hh,
+      scale: scale,
+      cx: cx,
+      cy: cy,
+      left: left,
+      right: right,
+      top: top,
+      bottom: bottom,
+      paths: [clearPath, outlinePath],
+    );
 
+    // Build the grid overlay path (only when the toggle is on — otherwise
+    // gridCells is empty and this is a no-op).
+    final gridPath = Path();
+    if (gridCells.isNotEmpty) {
+      _appendCellsToPath(
+        cells: gridCells,
+        hw: hw,
+        hh: hh,
+        scale: scale,
+        cx: cx,
+        cy: cy,
+        left: left,
+        right: right,
+        top: top,
+        bottom: bottom,
+        paths: [gridPath],
+      );
+    }
+
+    canvas.saveLayer(Offset.zero & size, _layerPaint);
+    canvas.drawRect(Offset.zero & size, _fogPaint);
+    if (gridCells.isNotEmpty) {
+      canvas.drawPath(gridPath, _gridPaint);
+    }
+    canvas.drawPath(clearPath, _clearPaint);
+    canvas.restore();
+
+    // Outlines drawn after restore() so they sit on top of the cleared
+    // region rather than being erased by the clear blend.
+    canvas.drawPath(outlinePath, _outlinePaint);
+  }
+
+  // Projects each cell once and appends the closed polygon to every path
+  // in [paths]. Skips cells whose bounding box falls entirely outside the
+  // padded viewport.
+  void _appendCellsToPath({
+    required List<_RenderCell> cells,
+    required double hw,
+    required double hh,
+    required double scale,
+    required double cx,
+    required double cy,
+    required double left,
+    required double right,
+    required double top,
+    required double bottom,
+    required List<Path> paths,
+  }) {
     for (final cell in cells) {
       final pts = cell.boundary;
       if (pts.isEmpty) continue;
 
-      // Project + accumulate bounds in one pass.
       final firstDx = hw + pts[0].mx * scale - cx;
       final firstDy = hh + pts[0].my * scale - cy;
       var minX = firstDx, maxX = firstDx;
@@ -504,24 +677,26 @@ class _FogOfWarPainter extends CustomPainter {
         if (dy < minY) minY = dy;
         if (dy > maxY) maxY = dy;
       }
+      // Antimeridian guard: a cell whose boundary crosses ±180° longitude
+      // has two adjacent vertices in lat/lng space at e.g. +179° and -179°,
+      // which Mercator projects to mx ≈ 1 and mx ≈ 0 — opposite edges of
+      // the world. Drawing the polygon then produces a horizontal stripe
+      // across the screen. Detect it via the projected x-span: a normal
+      // cell occupies a small fraction of the world width, so any cell
+      // whose span exceeds half the world width is wrapping. At resolutions
+      // where this matters there are 1–2 such cells globally, all in the
+      // Pacific — losing them visually is acceptable.
+      if (maxX - minX > scale * 0.5) continue;
       if (maxX < left || minX > right || maxY < top || minY > bottom) continue;
 
-      clearPath.moveTo(projected[0].dx, projected[0].dy);
-      outlinePath.moveTo(projected[0].dx, projected[0].dy);
-      for (var i = 1; i < projected.length; i++) {
-        clearPath.lineTo(projected[i].dx, projected[i].dy);
-        outlinePath.lineTo(projected[i].dx, projected[i].dy);
+      for (final path in paths) {
+        path.moveTo(projected[0].dx, projected[0].dy);
+        for (var i = 1; i < projected.length; i++) {
+          path.lineTo(projected[i].dx, projected[i].dy);
+        }
+        path.close();
       }
-      clearPath.close();
-      outlinePath.close();
     }
-
-    canvas.drawPath(clearPath, _clearPaint);
-    canvas.restore();
-
-    // Outlines drawn after restore() so they sit on top of the cleared
-    // region rather than being erased by the clear blend.
-    canvas.drawPath(outlinePath, _outlinePaint);
   }
 
   @override

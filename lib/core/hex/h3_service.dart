@@ -79,4 +79,36 @@ class H3Service {
   int baseCell(HexIndex cell) {
     return _h3.getBaseCellNumber(BigInt.from(cell));
   }
+
+  /// All cells at [resolution] whose centroid lies inside [perimeter].
+  /// `perimeter` is treated as a simple closed polygon (the closing edge is
+  /// implicit). Used to enumerate cells visible in a viewport for the grid
+  /// overlay.
+  List<HexIndex> cellsInPolygon(List<LatLng> perimeter, int resolution) {
+    final coords = perimeter
+        .map((p) => GeoCoord(lat: p.latitude, lon: p.longitude))
+        .toList(growable: false);
+    return _h3
+        .polygonToCells(perimeter: coords, resolution: resolution)
+        .map((b) => b.toInt())
+        .toList(growable: false);
+  }
+
+  /// Every cell on Earth at [resolution]. Counts grow by ×7 per step:
+  /// res 0 → 122, res 1 → 842, res 2 → 5,882, res 3 → 41,162, etc.
+  /// Use this only at very low resolutions where the viewport polygon
+  /// approaches global coverage and `polygonToCells` becomes unreliable.
+  List<HexIndex> allCellsAtResolution(int resolution) {
+    final base = _h3.getRes0Cells();
+    if (resolution == 0) {
+      return base.map((b) => b.toInt()).toList(growable: false);
+    }
+    final out = <HexIndex>[];
+    for (final cell in base) {
+      for (final child in _h3.cellToChildren(cell, resolution)) {
+        out.add(child.toInt());
+      }
+    }
+    return out;
+  }
 }

@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>Obscuro Map — UI Design</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&display=swap"
+          rel="stylesheet"/>
+    <script crossorigin="anonymous"
+            integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L"
+            src="https://unpkg.com/react@18.3.1/umd/react.development.js"></script>
+    <script crossorigin="anonymous"
+            integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm"
+            src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js"></script>
+    <script crossorigin="anonymous"
+            integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y"
+            src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"></script>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box;}
+        html,body,#root{width:100%;height:100%;overflow:hidden;background:#0A0810;}
+        .dc-editable{cursor:text;outline:none;white-space:nowrap;border-radius:3px;padding:0 2px;margin:0 -2px}
+        .dc-editable:focus{background:#fff;box-shadow:0 0 0 1.5px #7B6FAA}
+        [data-dc-slot]{transition:transform .18s cubic-bezier(.2,.7,.3,1)}
+        [data-dc-slot].dc-dragging{transition:none;z-index:10;pointer-events:none}
+        [data-dc-slot].dc-dragging .dc-card{box-shadow:0 12px 40px rgba(0,0,0,.25),0 0 0 2px #7B6FAA;transform:scale(1.02)}
+        .dc-card{transition:box-shadow .15s,transform .15s}
+        .dc-card *{scrollbar-width:none}
+        .dc-card *::-webkit-scrollbar{display:none}
+        .dc-labelrow{display:flex;align-items:center;gap:4px;height:24px}
+        .dc-grip{cursor:grab;display:flex;align-items:center;padding:5px 4px;border-radius:4px;transition:background .12s}
+        .dc-grip:hover{background:rgba(0,0,0,.08)}
+        .dc-grip:active{cursor:grabbing}
+        .dc-labeltext{cursor:pointer;border-radius:4px;padding:3px 6px;display:flex;align-items:center;transition:background .12s}
+        .dc-labeltext:hover{background:rgba(0,0,0,.05)}
+        .dc-expand{position:absolute;bottom:100%;right:0;margin-bottom:5px;z-index:2;opacity:0;transition:opacity .12s,background .12s;width:22px;height:22px;border-radius:5px;border:none;cursor:pointer;padding:0;background:transparent;color:rgba(60,50,40,.7);display:flex;align-items:center;justify-content:center}
+        .dc-expand:hover{background:rgba(0,0,0,.06);color:#2a251f}
+        [data-dc-slot]:hover .dc-expand{opacity:1}
+    </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+
+    // ════════════════════════════════════════════════════════════
+    // iOS FRAME COMPONENTS
+    // ════════════════════════════════════════════════════════════
+
+    function IOSStatusBar({ dark = false, time = '8:20' }) {
+      const c = dark ? '#fff' : '#000';
+      return (
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'center',
+          padding:'21px 24px 19px', boxSizing:'border-box',
+          position:'relative', zIndex:20, width:'100%' }}>
+          <div style={{ flex:1, height:22, display:'flex', alignItems:'center', justifyContent:'center', paddingTop:1.5 }}>
+            <span style={{ fontFamily:'-apple-system,"SF Pro",system-ui', fontWeight:590, fontSize:17, lineHeight:'22px', color:c }}>{time}</span>
+          </div>
+          <div style={{ flex:1, height:22, display:'flex', alignItems:'center', justifyContent:'center', gap:7, paddingTop:1, paddingRight:1 }}>
+            <svg width="19" height="12" viewBox="0 0 19 12">
+              <rect x="0" y="7.5" width="3.2" height="4.5" rx="0.7" fill={c}/>
+              <rect x="4.8" y="5" width="3.2" height="7" rx="0.7" fill={c}/>
+              <rect x="9.6" y="2.5" width="3.2" height="9.5" rx="0.7" fill={c}/>
+              <rect x="14.4" y="0" width="3.2" height="12" rx="0.7" fill={c}/>
+            </svg>
+            <svg width="17" height="12" viewBox="0 0 17 12">
+              <path d="M8.5 3.2C10.8 3.2 12.9 4.1 14.4 5.6L15.5 4.5C13.7 2.7 11.2 1.5 8.5 1.5C5.8 1.5 3.3 2.7 1.5 4.5L2.6 5.6C4.1 4.1 6.2 3.2 8.5 3.2Z" fill={c}/>
+              <path d="M8.5 6.8C9.9 6.8 11.1 7.3 12 8.2L13.1 7.1C11.8 5.9 10.2 5.1 8.5 5.1C6.8 5.1 5.2 5.9 3.9 7.1L5 8.2C5.9 7.3 7.1 6.8 8.5 6.8Z" fill={c}/>
+              <circle cx="8.5" cy="10.5" r="1.5" fill={c}/>
+            </svg>
+            <svg width="27" height="13" viewBox="0 0 27 13">
+              <rect x="0.5" y="0.5" width="23" height="12" rx="3.5" stroke={c} strokeOpacity="0.35" fill="none"/>
+              <rect x="2" y="2" width="20" height="9" rx="2" fill={c}/>
+              <path d="M25 4.5V8.5C25.8 8.2 26.5 7.2 26.5 6.5C26.5 5.8 25.8 4.8 25 4.5Z" fill={c} fillOpacity="0.4"/>
+            </svg>
+          </div>
+        </div>
+      );
+    }
+
+    function IOSDevice({ children, width = 402, height = 874, dark = false, time = '8:20' }) {
+      return (
+        <div style={{ width, height, borderRadius:48, overflow:'hidden', position:'relative',
+          background: dark ? '#000' : '#F2F2F7',
+          boxShadow:'0 40px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.08)',
+          fontFamily:'-apple-system,system-ui,sans-serif', WebkitFontSmoothing:'antialiased' }}>
+          {/* dynamic island */}
+          <div style={{ position:'absolute', top:11, left:'50%', transform:'translateX(-50%)',
+            width:126, height:37, borderRadius:24, background:'#000', zIndex:50 }} />
+          {/* status bar */}
+          <div style={{ position:'absolute', top:0, left:0, right:0, zIndex:10 }}>
+            <IOSStatusBar dark={dark} time={time}/>
+          </div>
+          {/* content */}
+          <div style={{ height:'100%', display:'flex', flexDirection:'column' }}>
+            <div style={{ flex:1, overflow:'hidden' }}>{children}</div>
+          </div>
+          {/* home indicator */}
+          <div style={{ position:'absolute', bottom:0, left:0, right:0, zIndex:60,
+            height:34, display:'flex', justifyContent:'center', alignItems:'flex-end',
+            paddingBottom:8, pointerEvents:'none' }}>
+            <div style={{ width:139, height:5, borderRadius:100,
+              background: dark ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.25)' }} />
+          </div>
+        </div>
+      );
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // DESIGN CANVAS
+    // ════════════════════════════════════════════════════════════
+
+    const DC = {
+      bg:'#f0eee9', grid:'rgba(0,0,0,0.06)', label:'rgba(60,50,40,0.7)',
+      title:'rgba(40,30,20,0.85)', subtitle:'rgba(60,50,40,0.6)',
+      font:'-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif',
+    };
+
+    const DCCtx = React.createContext(null);
+
+    function DesignCanvas({ children, minScale = 0.1, maxScale = 8 }) {
+      const [state, setState] = React.useState({ sections:{}, focus:null });
+      const [ready, setReady] = React.useState(false);
+      React.useEffect(() => { setReady(true); }, []);
+
+      const registry = {};
+      const sectionMeta = {};
+      const sectionOrder = [];
+      React.Children.forEach(children, (sec) => {
+        if (!sec || sec.type !== DCSection) return;
+        const sid = sec.props.id ?? sec.props.title;
+        if (!sid) return;
+        sectionOrder.push(sid);
+        const persisted = state.sections[sid] || {};
+        const srcIds = [];
+        React.Children.forEach(sec.props.children, (ab) => {
+          if (!ab || ab.type !== DCArtboard) return;
+          const aid = ab.props.id ?? ab.props.label;
+          if (!aid) return;
+          registry[`${sid}/${aid}`] = { sectionId:sid, artboard:ab };
+          srcIds.push(aid);
+        });
+        const kept = (persisted.order||[]).filter(k=>srcIds.includes(k));
+        sectionMeta[sid] = {
+          title: persisted.title ?? sec.props.title,
+          subtitle: sec.props.subtitle,
+          slotIds: [...kept, ...srcIds.filter(k=>!kept.includes(k))],
+        };
+      });
+
+      const api = React.useMemo(() => ({
+        state, section:(id)=>state.sections[id]||{},
+        patchSection:(id,p)=>setState(s=>({ ...s, sections:{ ...s.sections, [id]:{ ...s.sections[id], ...(typeof p==='function'?p(s.sections[id]||{}):p) } } })),
+        setFocus:(slotId)=>setState(s=>({ ...s, focus:slotId })),
+      }), [state]);
+
+      React.useEffect(() => {
+        const onKey=(e)=>{ if(e.key==='Escape') api.setFocus(null); };
+        document.addEventListener('keydown',onKey);
+        return ()=>document.removeEventListener('keydown',onKey);
+      }, [api]);
+
+      return (
+        <DCCtx.Provider value={api}>
+          <DCViewport minScale={minScale} maxScale={maxScale}>{ready && children}</DCViewport>
+          {state.focus && registry[state.focus] && (
+            <DCFocusOverlay entry={registry[state.focus]} sectionMeta={sectionMeta} sectionOrder={sectionOrder}/>
+          )}
+        </DCCtx.Provider>
+      );
+    }
+
+    function DCViewport({ children, minScale=0.1, maxScale=8 }) {
+      const vpRef = React.useRef(null);
+      const worldRef = React.useRef(null);
+      const tf = React.useRef({ x:0, y:0, scale:1 });
+
+      const apply = React.useCallback(() => {
+        const {x,y,scale} = tf.current;
+        if(worldRef.current) worldRef.current.style.transform = `translate3d(${x}px,${y}px,0) scale(${scale})`;
+      },[]);
+
+      React.useEffect(()=>{
+        const vp = vpRef.current; if(!vp) return;
+        const zoomAt=(cx,cy,factor)=>{
+          const r=vp.getBoundingClientRect(), px=cx-r.left, py=cy-r.top, t=tf.current;
+          const next=Math.min(maxScale,Math.max(minScale,t.scale*factor)), k=next/t.scale;
+          t.x=px-(px-t.x)*k; t.y=py-(py-t.y)*k; t.scale=next; apply();
+        };
+        const isMouseWheel=(e)=>e.deltaMode!==0||(e.deltaX===0&&Number.isInteger(e.deltaY)&&Math.abs(e.deltaY)>=40);
+        let isGesturing=false;
+        const onWheel=(e)=>{
+          e.preventDefault(); if(isGesturing) return;
+          if(e.ctrlKey) zoomAt(e.clientX,e.clientY,Math.exp(-e.deltaY*0.01));
+          else if(isMouseWheel(e)) zoomAt(e.clientX,e.clientY,Math.exp(-Math.sign(e.deltaY)*0.18));
+          else { tf.current.x-=e.deltaX; tf.current.y-=e.deltaY; apply(); }
+        };
+        let gsBase=1;
+        const onGS=(e)=>{e.preventDefault();isGesturing=true;gsBase=tf.current.scale;};
+        const onGC=(e)=>{e.preventDefault();zoomAt(e.clientX,e.clientY,(gsBase*e.scale)/tf.current.scale);};
+        const onGE=(e)=>{e.preventDefault();isGesturing=false;};
+        let drag=null;
+        const onPD=(e)=>{
+          const onBg=!e.target.closest('[data-dc-slot],.dc-editable');
+          if(!(e.button===1||(e.button===0&&onBg))) return;
+          e.preventDefault(); vp.setPointerCapture(e.pointerId);
+          drag={id:e.pointerId,lx:e.clientX,ly:e.clientY}; vp.style.cursor='grabbing';
+        };
+        const onPM=(e)=>{
+          if(!drag||e.pointerId!==drag.id) return;
+          tf.current.x+=e.clientX-drag.lx; tf.current.y+=e.clientY-drag.ly;
+          drag.lx=e.clientX; drag.ly=e.clientY; apply();
+        };
+        const onPU=(e)=>{ if(!drag||e.pointerId!==drag.id) return; vp.releasePointerCapture(e.pointerId); drag=null; vp.style.cursor=''; };
+        vp.addEventListener('wheel',onWheel,{passive:false});
+        vp.addEventListener('gesturestart',onGS,{passive:false});
+        vp.addEventListener('gesturechange',onGC,{passive:false});
+        vp.addEventListener('gestureend',onGE,{passive:false});
+        vp.addEventListener('pointerdown',onPD);
+        vp.addEventListener('pointermove',onPM);
+        vp.addEventListener('pointerup',onPU);
+        vp.addEventListener('pointercancel',onPU);
+        return ()=>{
+          vp.removeEventListener('wheel',onWheel);
+          vp.removeEventListener('gesturestart',onGS);
+          vp.removeEventListener('gesturechange',onGC);
+          vp.removeEventListener('gestureend',onGE);
+          vp.removeEventListener('pointerdown',onPD);
+          vp.removeEventListener('pointermove',onPM);
+          vp.removeEventListener('pointerup',onPU);
+          vp.removeEventListener('pointercancel',onPU);
+        };
+      },[apply,minScale,maxScale]);
+
+      const gridSvg=`url("data:image/svg+xml,%3Csvg width='120' height='120' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M120 0H0v120' fill='none' stroke='${encodeURIComponent(DC.grid)}' stroke-width='1'/%3E%3C/svg%3E")`;
+      return (
+        <div ref={vpRef} style={{ height:'100vh', width:'100vw', background:DC.bg, overflow:'hidden',
+          overscrollBehavior:'none', touchAction:'none', position:'relative', fontFamily:DC.font, boxSizing:'border-box' }}>
+          <div ref={worldRef} style={{ position:'absolute', top:0, left:0, transformOrigin:'0 0', willChange:'transform',
+            width:'max-content', minWidth:'100%', minHeight:'100%', padding:'60px 0 80px' }}>
+            <div style={{ position:'absolute', inset:-6000, backgroundImage:gridSvg, backgroundSize:'120px 120px', pointerEvents:'none', zIndex:-1 }}/>
+            {children}
+          </div>
+        </div>
+      );
+    }
+
+    function DCSection({ id, title, subtitle, children, gap=48 }) {
+      const ctx = React.useContext(DCCtx);
+      const sid = id ?? title;
+      const all = React.Children.toArray(children);
+      const artboards = all.filter(c=>c&&c.type===DCArtboard);
+      const srcOrder = artboards.map(a=>a.props.id??a.props.label);
+      const sec = (ctx&&sid&&ctx.section(sid))||{};
+      const order = React.useMemo(()=>{
+        const kept=(sec.order||[]).filter(k=>srcOrder.includes(k));
+        return [...kept,...srcOrder.filter(k=>!kept.includes(k))];
+      },[sec.order,srcOrder.join('|')]);
+      const byId = Object.fromEntries(artboards.map(a=>[a.props.id??a.props.label,a]));
+      return (
+        <div data-dc-section={sid} style={{ marginBottom:80, position:'relative' }}>
+          <div style={{ padding:'0 60px 56px' }}>
+            <div style={{ fontSize:28, fontWeight:600, color:DC.title, letterSpacing:-0.4, marginBottom:6 }}>{sec.title??title}</div>
+            {subtitle && <div style={{ fontSize:16, color:DC.subtitle }}>{subtitle}</div>}
+          </div>
+          <div style={{ display:'flex', gap, padding:'0 60px', alignItems:'flex-start', width:'max-content' }}>
+            {order.map(k=>(
+              <DCArtboardFrame key={k} sectionId={sid} artboard={byId[k]}
+                label={(sec.labels||{})[k]??byId[k].props.label}
+                order={order}
+                onRename={v=>ctx&&ctx.patchSection(sid,x=>({labels:{...x.labels,[k]:v}}))}
+                onReorder={next=>ctx&&ctx.patchSection(sid,{order:next})}
+                onFocus={()=>ctx&&ctx.setFocus(`${sid}/${k}`)}/>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    function DCArtboard() { return null; }
+
+    function DCArtboardFrame({ sectionId, artboard, label, order, onRename, onReorder, onFocus }) {
+      const { id:rawId, label:rawLabel, width=260, height=480, children, style={} } = artboard.props;
+      const id = rawId??rawLabel;
+      const ref = React.useRef(null);
+      return (
+        <div ref={ref} data-dc-slot={id} style={{ position:'relative', flexShrink:0 }}>
+          <div className="dc-labelrow" style={{ position:'absolute', bottom:'100%', left:-4, marginBottom:4, color:DC.label }}>
+            <div className="dc-grip" title="Drag to reorder">
+              <svg width="9" height="13" viewBox="0 0 9 13" fill="currentColor"><circle cx="2" cy="2" r="1.1"/><circle cx="7" cy="2" r="1.1"/><circle cx="2" cy="6.5" r="1.1"/><circle cx="7" cy="6.5" r="1.1"/><circle cx="2" cy="11" r="1.1"/><circle cx="7" cy="11" r="1.1"/></svg>
+            </div>
+            <div className="dc-labeltext" onClick={onFocus} title="Click to focus">
+              <span style={{ fontSize:15, fontWeight:500, color:DC.label, lineHeight:1 }}>{label}</span>
+            </div>
+          </div>
+          <button className="dc-expand" onClick={onFocus} title="Focus">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="M7 1h4v4M5 11H1V7M11 1L7.5 4.5M1 11l3.5-3.5"/></svg>
+          </button>
+          <div className="dc-card" style={{ borderRadius:2, boxShadow:'0 1px 3px rgba(0,0,0,.08),0 4px 16px rgba(0,0,0,.06)', overflow:'hidden', width, height, background:'#fff', ...style }}>
+            {children}
+          </div>
+        </div>
+      );
+    }
+
+    function DCFocusOverlay({ entry, sectionMeta, sectionOrder }) {
+      const ctx = React.useContext(DCCtx);
+      const { sectionId, artboard } = entry;
+      const sec = ctx.section(sectionId);
+      const meta = sectionMeta[sectionId];
+      const peers = meta.slotIds;
+      const aid = artboard.props.id??artboard.props.label;
+      const idx = peers.indexOf(aid);
+      const go=(d)=>{ const n=peers[(idx+d+peers.length)%peers.length]; if(n) ctx.setFocus(`${sectionId}/${n}`); };
+      React.useEffect(()=>{
+        const k=(e)=>{ if(e.key==='ArrowLeft'){e.preventDefault();go(-1);} if(e.key==='ArrowRight'){e.preventDefault();go(1);} };
+        document.addEventListener('keydown',k);
+        return ()=>document.removeEventListener('keydown',k);
+      });
+      const { width=260, height=480, children } = artboard.props;
+      const [vp, setVp] = React.useState({ w:window.innerWidth, h:window.innerHeight });
+      React.useEffect(()=>{ const r=()=>setVp({w:window.innerWidth,h:window.innerHeight}); window.addEventListener('resize',r); return ()=>window.removeEventListener('resize',r); },[]);
+      const scale = Math.max(0.1,Math.min((vp.w-200)/width,(vp.h-260)/height,2));
+      const Arrow=({dir,onClick})=>(
+        <button onClick={e=>{e.stopPropagation();onClick();}}
+          style={{ position:'absolute', top:'50%', [dir]:28, transform:'translateY(-50%)',
+            border:'none', background:'rgba(255,255,255,.08)', color:'rgba(255,255,255,.9)',
+            width:44, height:44, borderRadius:22, cursor:'pointer',
+            display:'flex', alignItems:'center', justifyContent:'center', transition:'background .15s' }}>
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <path d={dir==='left'?'M11 3L5 9l6 6':'M7 3l6 6-6 6'}/></svg>
+        </button>
+      );
+      return ReactDOM.createPortal(
+        <div onClick={()=>ctx.setFocus(null)} style={{ position:'fixed', inset:0, zIndex:100,
+          background:'rgba(24,20,16,.6)', backdropFilter:'blur(14px)', fontFamily:DC.font, color:'#fff' }}>
+          <div onClick={e=>e.stopPropagation()} style={{ position:'absolute', top:16, right:20 }}>
+            <button onClick={()=>ctx.setFocus(null)} style={{ border:'none', background:'transparent',
+              color:'rgba(255,255,255,.7)', width:32, height:32, borderRadius:16, fontSize:20, cursor:'pointer' }}>×</button>
+          </div>
+          <div style={{ position:'absolute', top:64, bottom:56, left:100, right:100,
+            display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:16 }}>
+            <div onClick={e=>e.stopPropagation()} style={{ width:width*scale, height:height*scale, position:'relative' }}>
+              <div style={{ width, height, transform:`scale(${scale})`, transformOrigin:'top left',
+                background:'#fff', borderRadius:2, overflow:'hidden', boxShadow:'0 20px 80px rgba(0,0,0,.4)' }}>
+                {children}
+              </div>
+            </div>
+            <div onClick={e=>e.stopPropagation()} style={{ fontSize:14, fontWeight:500, opacity:.85, textAlign:'center' }}>
+              {(sec.labels||{})[aid]??artboard.props.label}
+              <span style={{ opacity:.5, marginLeft:10 }}>{idx+1} / {peers.length}</span>
+            </div>
+          </div>
+          <Arrow dir="left" onClick={()=>go(-1)}/>
+          <Arrow dir="right" onClick={()=>go(1)}/>
+          <div onClick={e=>e.stopPropagation()} style={{ position:'absolute', bottom:20, left:'50%', transform:'translateX(-50%)', display:'flex', gap:8 }}>
+            {peers.map((p,i)=>(
+              <button key={p} onClick={()=>ctx.setFocus(`${sectionId}/${p}`)}
+                style={{ border:'none', padding:0, cursor:'pointer', width:6, height:6, borderRadius:3,
+                  background:i===idx?'#fff':'rgba(255,255,255,.3)' }}/>
+            ))}
+          </div>
+        </div>,
+        document.body
+      );
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // OBSCURO MAP — HEX MATH + TERRAIN
+    // ════════════════════════════════════════════════════════════
+
+    const HR = 72;
+    const HH = Math.sqrt(3) * HR;
+    const COL_STEP = HR * 1.5;
+
+    function hexPoints(cx, cy, r) {
+      const pts = [];
+      for (let i = 0; i < 6; i++) {
+        const a = (Math.PI / 3) * i;
+        pts.push(`${(cx + r * Math.cos(a)).toFixed(2)},${(cy + r * Math.sin(a)).toFixed(2)}`);
+      }
+      return pts.join(' ');
+    }
+
+    function hexCenter(col, row) {
+      return {
+        cx: HR + col * COL_STEP,
+        cy: HH / 2 + row * HH + (col % 2 === 1 ? HH / 2 : 0),
+      };
+    }
+
+    const EXPLORED = new Set(['1-3','2-3','1-4','2-4']);
+    const TERRAIN_MAP = {
+      '0-0':'mountains','0-1':'forest',  '0-2':'water',    '0-3':'ruins',
+      '0-4':'mountains','0-5':'forest',  '0-6':'plains',   '0-7':'ruins',
+      '1-0':'forest',   '1-1':'plains',  '1-2':'mountains','1-3':'x',
+      '1-4':'x',        '1-5':'water',   '1-6':'ruins',    '1-7':'forest',
+      '2-0':'water',    '2-1':'ruins',   '2-2':'plains',   '2-3':'x',
+      '2-4':'x',        '2-5':'mountains','2-6':'forest',  '2-7':'water',
+      '3-0':'plains',   '3-1':'mountains','3-2':'forest',  '3-3':'water',
+      '3-4':'ruins',    '3-5':'plains',  '3-6':'mountains','3-7':'forest',
+    };
+
+    const HEX_GRID = [];
+    for (let col = 0; col < 4; col++) {
+      for (let row = 0; row < 8; row++) {
+        const key = `${col}-${row}`;
+        const { cx, cy } = hexCenter(col, row);
+        const explored = EXPLORED.has(key);
+        HEX_GRID.push({ col, row, cx, cy, explored, terrain: TERRAIN_MAP[key] || 'plains' });
+      }
+    }
+
+    const { cx: UX, cy: UY } = hexCenter(1, 3);
+
+    // ── Terrain Art (Civilization-inspired, centered at origin) ──
+
+    function ArtMountains() {
+      return (
+        <g fill="none" stroke="#C1BDD2" strokeLinejoin="round" opacity="0.42">
+          <polygon points="-22,20 -6,-26 10,20" fill="rgba(193,189,210,0.05)" strokeWidth="1.3"/>
+          <polygon points="-2,20 14,-16 30,20" fill="rgba(193,189,210,0.07)" strokeWidth="1.3"/>
+          <polyline points="-9,-12 -6,-26 -3,-14" strokeWidth="1.1" opacity="0.65"/>
+          <line x1="-28" y1="20" x2="34" y2="20" strokeWidth="0.7" opacity="0.3"/>
+        </g>
+      );
+    }
+
+    function ArtForest() {
+      const s = 'rgba(193,189,210,0.06)'; const l = '#C1BDD2';
+      const tree = (tx, ty, sc) => (
+        <g key={`t${tx}`} transform={`translate(${tx},${ty}) scale(${sc})`}>
+          <polygon points="0,-22 -14,4 14,4" fill={s} stroke={l} strokeWidth="1.2" strokeLinejoin="round"/>
+          <polygon points="0,-12 -10,10 10,10" fill={s} stroke={l} strokeWidth="1" strokeLinejoin="round"/>
+          <rect x="-3" y="10" width="6" height="10" fill={s} stroke={l} strokeWidth="1"/>
+        </g>
+      );
+      return <g opacity="0.38">{tree(-19,6,0.74)}{tree(0,-2,1)}{tree(19,6,0.8)}</g>;
+    }
+
+    function ArtWater() {
+      const wave = (dy) => (
+        <path key={dy} d={`M-28,${dy} C-20,${dy-7} -12,${dy+7} -4,${dy} C4,${dy-7} 12,${dy+7} 20,${dy} C24,${dy-3} 26,${dy} 28,${dy}`}
+          fill="none" stroke="#C1BDD2" strokeWidth="1.1" strokeLinecap="round"/>
+      );
+      return (
+        <g opacity="0.36">
+          {wave(-11)}{wave(1)}{wave(13)}
+          <ellipse cx="0" cy="1" rx="26" ry="20" fill="none" stroke="#C1BDD2" strokeWidth="0.6" opacity="0.25"/>
+        </g>
+      );
+    }
+
+    function ArtRuins() {
+      return (
+        <g fill="rgba(193,189,210,0.07)" stroke="#C1BDD2" strokeWidth="1.2" strokeLinejoin="round" opacity="0.4">
+          <rect x="-9" y="-22" width="18" height="34"/>
+          <rect x="-9" y="-30" width="5" height="9"/>
+          <rect x="4" y="-30" width="5" height="9"/>
+          <path d="M-4,-10 L-4,-3 Q0,-8 4,-3 L4,-10" fill="none"/>
+          <polyline points="-18,12 -14,8 -10,12" fill="none" strokeWidth="1"/>
+          <polyline points="10,8 14,12 18,10" fill="none" strokeWidth="1"/>
+        </g>
+      );
+    }
+
+    function ArtPlains() {
+      return (
+        <g fill="none" stroke="#C1BDD2" opacity="0.28">
+          <path d="M-26,6 Q-16,-8 -4,2 Q8,-10 20,4" strokeWidth="1.1" strokeLinecap="round"/>
+          <path d="M-22,15 Q-10,2 2,12 Q14,0 24,12" strokeWidth="1" strokeLinecap="round"/>
+          {[-14,-4,8,18].map((x,i)=>(
+            <circle key={i} cx={x} cy={-6+(i%2)*6} r={i%3===0?2:1.5} fill="#C1BDD2" stroke="none"/>
+          ))}
+        </g>
+      );
+    }
+
+    function TerrainArt({ type }) {
+      switch(type){
+        case 'mountains': return <ArtMountains/>;
+        case 'forest':    return <ArtForest/>;
+        case 'water':     return <ArtWater/>;
+        case 'ruins':     return <ArtRuins/>;
+        default:          return <ArtPlains/>;
+      }
+    }
+
+    // ── Map Background (light/day style) ───────────────────────
+    function MapBg({ w=390, h=844 }) {
+      return (
+        <svg width={w} height={h} style={{ position:'absolute', inset:0 }}>
+          {/* Base land */}
+          <rect width={w} height={h} fill="#E8E3D8"/>
+          {/* Water body */}
+          <path d="M0,205 Q55,238 32,330 Q12,422 75,498 Q92,518 62,595 L0,595 Z" fill="#AAD3DF"/>
+          {/* Parks */}
+          <rect x="105" y="352" width="74" height="70" rx="3" fill="#C8DFAF"/>
+          <rect x="230" y="172" width="60" height="84" rx="3" fill="#C8DFAF"/>
+          <rect x="315" y="498" width="52" height="58" rx="3" fill="#C8DFAF"/>
+          {/* Building blocks */}
+          {[
+            [8,162,60,82],[87,168,60,74],[178,160,72,52],[268,155,64,110],[360,165,28,70],
+            [8,300,54,94],[87,296,54,68],[178,300,66,90],[268,290,54,104],[360,300,28,62],
+            [8,442,60,90],[87,430,57,100],[178,436,66,78],[268,422,60,96],
+            [8,586,64,74],[87,578,56,80],[178,572,64,82],[268,560,57,92],[360,580,28,64],
+          ].map(([x,y,ww,hh],i)=>(
+            <rect key={i} x={x} y={y} width={ww} height={hh}
+              fill={i%2===0 ? '#DADAD6' : '#D4CFC8'} rx="2"/>
+          ))}
+          {/* Major roads */}
+          {[152,284,428,562,695].map((y,i)=>(
+            <line key={`h${i}`} x1="0" y1={y} x2={w} y2={y}
+              stroke={i===1?"#FFFFFF":"#F0EDE6"} strokeWidth={i===1?5:2.5}/>
+          ))}
+          {[72,164,262,356].map((x,i)=>(
+            <line key={`v${i}`} x1={x} y1="0" x2={x} y2={h}
+              stroke={i===1?"#FFFFFF":"#F0EDE6"} strokeWidth={i===1?4:2}/>
+          ))}
+          {/* Minor roads */}
+          {[200,340,480,620].map((y,i)=>(
+            <line key={`m${i}`} x1="0" y1={y} x2={w} y2={y} stroke="#EAE6DE" strokeWidth="1.2"/>
+          ))}
+          {/* Road outlines */}
+          {[152,284].map((y,i)=>(
+            <line key={`ro${i}`} x1="0" y1={y} x2={w} y2={y} stroke="#D4CCBF" strokeWidth={i===1?6:3.5}
+              strokeOpacity="0.35"/>
+          ))}
+          {/* Labels */}
+          <text x="92" y="268" fill="#888070" fontSize="9" fontFamily="system-ui" fontWeight="500">Головна вул.</text>
+          <text x="198" y="418" fill="#5A5448" fontSize="11" fontFamily="system-ui" fontWeight="700">Kyiv · Київ</text>
+          <text x="30"  y="350" fill="#7EA8B8" fontSize="8"  fontFamily="system-ui" fontWeight="500">р. Дніпро</text>
+        </svg>
+      );
+    }
+
+    // ── Hex Overlay ────────────────────────────────────────────
+    function HexOverlay({ w=390, h=844, showGrid=true }) {
+      const r = HR - 2;
+      const exploredHexes   = HEX_GRID.filter(hx => hx.explored);
+      const unexploredHexes = HEX_GRID.filter(hx => !hx.explored);
+      const canvasRef = React.useRef(null);
+
+      React.useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, w, h);
+
+        // Fill entire canvas with fog
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.fillStyle = 'rgba(18,12,38,0.72)';
+        ctx.fillRect(0, 0, w, h);
+
+        // Cut out explored hexes using destination-out composite:
+        // each drawn polygon erases the fog canvas wherever it covers.
+        // Grid ON  → use exact polygon size (r) so grid lines sit cleanly on top.
+        // Grid OFF → use HR+6 so adjacent hexes overlap in canvas space,
+        //            their destination-out operations compound → seamless merged zone.
+        const hexR = showGrid ? r : HR + 6;
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.fillStyle = 'rgba(0,0,0,1)';
+
+        for (const { cx, cy } of exploredHexes) {
+          ctx.beginPath();
+          for (let i = 0; i < 6; i++) {
+            const a = (Math.PI / 3) * i;
+            const x = cx + hexR * Math.cos(a);
+            const y = cy + hexR * Math.sin(a);
+            i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+          }
+          ctx.closePath();
+          ctx.fill();
+        }
+        ctx.globalCompositeOperation = 'source-over';
+      }, [showGrid, w, h]);
+
+      return (
+        <div style={{ position:'absolute', inset:0 }}>
+          {/* Canvas: seamless fog with holes punched for explored area */}
+          <canvas ref={canvasRef} width={w} height={h}
+            style={{ position:'absolute', inset:0 }}/>
+
+          {/* SVG: terrain art, grid lines, user marker — sit on top of fog */}
+          <svg width={w} height={h} style={{ position:'absolute', inset:0 }}>
+            <defs>
+              {showGrid && unexploredHexes.map(hx=>(
+                <clipPath key={`cp-${hx.col}-${hx.row}`} id={`cp-${hx.col}-${hx.row}`}>
+                  <polygon points={hexPoints(hx.cx,hx.cy,r)}/>
+                </clipPath>
+              ))}
+              <radialGradient id="uglow" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stopColor="#9D8FCC" stopOpacity="0.55"/>
+                <stop offset="100%" stopColor="#9D8FCC" stopOpacity="0"/>
+              </radialGradient>
+            </defs>
+
+            {/* Terrain art — only when grid is on */}
+            {showGrid && unexploredHexes.map(({col,row,cx,cy,terrain})=>(
+              <g key={`ta-${col}-${row}`}
+                 clipPath={`url(#cp-${col}-${row})`}
+                 transform={`translate(${cx},${cy})`}>
+                <TerrainArt type={terrain}/>
+              </g>
+            ))}
+
+            {/* Grid lines — only when grid is on */}
+            {showGrid && HEX_GRID.map(({col,row,cx,cy,explored})=>(
+              <polygon key={`gl-${col}-${row}`}
+                points={hexPoints(cx,cy,r)}
+                fill="none"
+                stroke={explored ? 'rgba(193,189,210,0.28)' : 'rgba(193,189,210,0.15)'}
+                strokeWidth="1"/>
+            ))}
+
+            {/* User location marker */}
+            <circle cx={UX} cy={UY} r="34" fill="url(#uglow)"/>
+            <circle cx={UX} cy={UY} r="13" fill="rgba(107,90,155,0.22)" stroke="rgba(193,189,210,0.35)" strokeWidth="1.5"/>
+            <circle cx={UX} cy={UY} r="6"  fill="#9D8FCC"/>
+            <circle cx={UX} cy={UY} r="3"  fill="white"/>
+          </svg>
+        </div>
+      );
+    }
+
+    // ── Map Buttons ────────────────────────────────────────────
+    const ICONS = {
+      locate: (c) => (
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+          <circle cx="11" cy="11" r="4" stroke={c} strokeWidth="2"/>
+          <line x1="11" y1="1.5" x2="11" y2="5.5"   stroke={c} strokeWidth="2" strokeLinecap="round"/>
+          <line x1="11" y1="16.5" x2="11" y2="20.5" stroke={c} strokeWidth="2" strokeLinecap="round"/>
+          <line x1="1.5" y1="11" x2="5.5" y2="11"   stroke={c} strokeWidth="2" strokeLinecap="round"/>
+          <line x1="16.5" y1="11" x2="20.5" y2="11" stroke={c} strokeWidth="2" strokeLinecap="round"/>
+        </svg>
+      ),
+      plus: (c) => (
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+          <line x1="10" y1="3" x2="10" y2="17" stroke={c} strokeWidth="2.2" strokeLinecap="round"/>
+          <line x1="3" y1="10" x2="17" y2="10" stroke={c} strokeWidth="2.2" strokeLinecap="round"/>
+        </svg>
+      ),
+      minus: (c) => (
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+          <line x1="4" y1="10" x2="16" y2="10" stroke={c} strokeWidth="2.2" strokeLinecap="round"/>
+        </svg>
+      ),
+      erase: (c) => (
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+          <path d="M4 6.5h12l-1.1 10H5.1L4 6.5z" stroke={c} strokeWidth="1.7" strokeLinejoin="round"/>
+          <line x1="2.5" y1="6.5" x2="17.5" y2="6.5" stroke={c} strokeWidth="1.7" strokeLinecap="round"/>
+          <path d="M7.5 6.5V4.5h5v2" stroke={c} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      ),
+      fill: (c) => (
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+          <path d="M13.5 14C13.5 15.8 12.4 17 11 17C9.6 17 8.5 15.8 8.5 14C8.5 11.8 11 8 11 8C11 8 13.5 11.8 13.5 14Z" stroke={c} strokeWidth="1.7" strokeLinejoin="round"/>
+          <path d="M3.5 3L12 11.5" stroke={c} strokeWidth="1.7" strokeLinecap="round"/>
+          <path d="M3.5 3 Q5.5 1 7.5 3 Q9.5 5 7.5 7 L3.5 3Z" stroke={c} strokeWidth="1.6" strokeLinejoin="round" fill="none"/>
+        </svg>
+      ),
+      grid: (c) => (
+        <svg width="21" height="21" viewBox="0 0 21 21" fill="none">
+          <path d="M10.5 2 L17 6 L17 14 L10.5 18 L4 14 L4 6 Z" stroke={c} strokeWidth="1.7" strokeLinejoin="round"/>
+          <line x1="4"    y1="6"  x2="17"   y2="6"  stroke={c} strokeWidth="0.9" opacity="0.7"/>
+          <line x1="4"    y1="14" x2="17"   y2="14" stroke={c} strokeWidth="0.9" opacity="0.7"/>
+          <line x1="10.5" y1="2"  x2="10.5" y2="18" stroke={c} strokeWidth="0.9" opacity="0.7"/>
+        </svg>
+      ),
+    };
+
+    function MapControls({ gridActive }) {
+      const btns = [
+        { k:'locate' }, { k:'plus' }, { k:'minus' }, { k:'erase' }, { k:'fill' },
+        { k:'grid', active: gridActive },
+      ];
+      return (
+        <div style={{ position:'absolute', right:14, top:'50%', transform:'translateY(-50%)',
+          display:'flex', flexDirection:'column', gap:9, alignItems:'center', zIndex:100 }}>
+          {btns.map(({k,active})=>{
+            const ic = active ? 'rgba(255,255,255,0.97)' : '#18142A';
+            return (
+              <div key={k} style={{
+                width:48, height:48, borderRadius:24, cursor:'pointer', flexShrink:0,
+                background: active
+                  ? 'linear-gradient(145deg, #8B7FAA 0%, #5B4E8A 100%)'
+                  : 'rgba(255,255,255,0.94)',
+                display:'flex', alignItems:'center', justifyContent:'center',
+                boxShadow: active
+                  ? '0 4px 20px rgba(107,90,155,0.6), 0 2px 8px rgba(0,0,0,0.5)'
+                  : '0 4px 20px rgba(0,0,0,0.44), 0 2px 8px rgba(0,0,0,0.28)',
+                border: active ? '1px solid rgba(193,189,210,0.3)' : '1px solid rgba(255,255,255,0.55)',
+              }}>
+                {ICONS[k](ic)}
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
+
+    // ── Google Sign-In Pill ────────────────────────────────────
+    function GooglePill() {
+      return (
+        <div style={{ position:'absolute', top:66, left:'50%', transform:'translateX(-50%)', zIndex:110, whiteSpace:'nowrap' }}>
+          <div style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 20px',
+            background:'rgba(255,255,255,0.97)', borderRadius:9999,
+            boxShadow:'0 4px 24px rgba(0,0,0,0.48), 0 1px 4px rgba(0,0,0,0.2)',
+            fontFamily:'-apple-system,system-ui,sans-serif', fontSize:15, fontWeight:500, color:'#18142A',
+            border:'1px solid rgba(255,255,255,0.45)' }}>
+            <svg width="18" height="18" viewBox="0 0 18 18">
+              <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 01-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/>
+              <path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 009 18z" fill="#34A853"/>
+              <path d="M3.964 10.71A5.41 5.41 0 013.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 000 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/>
+              <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 00.957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335"/>
+            </svg>
+            Войти через Google
+          </div>
+        </div>
+      );
+    }
+
+    // ── Splash Screen ──────────────────────────────────────────
+    function SplashScreen({ w=390, h=844 }) {
+      const bgR = 58;
+      const bgH = Math.sqrt(3) * bgR;
+      const bgStep = bgR * 1.5;
+      const bgHexes = [];
+      for(let c=-1; c<Math.ceil(w/bgStep)+2; c++){
+        for(let r=-1; r<Math.ceil(h/bgH)+2; r++){
+          bgHexes.push({
+            cx: bgR + c*bgStep,
+            cy: bgH/2 + r*bgH + (c%2===1 ? bgH/2 : 0)
+          });
+        }
+      }
+
+      return (
+        <div style={{ width:w, height:h, position:'relative', overflow:'hidden',
+          background:'linear-gradient(168deg, #13101F 0%, #0D0B18 55%, #111626 100%)',
+          display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center' }}>
+
+          {/* Hex watermark */}
+          <svg style={{ position:'absolute', inset:0, opacity:0.058 }} width={w} height={h}>
+            {bgHexes.map(({cx,cy},i)=>(
+              <polygon key={i} points={hexPoints(cx,cy,bgR-1.5)} fill="none" stroke="#C1BDD2" strokeWidth="0.9"/>
+            ))}
+          </svg>
+
+          {/* Radial glow */}
+          <div style={{ position:'absolute', width:380, height:380, borderRadius:'50%',
+            background:'radial-gradient(circle, rgba(107,90,155,0.14) 0%, transparent 70%)',
+            top:'50%', left:'50%', transform:'translate(-50%,-60%)', pointerEvents:'none' }}/>
+
+          {/* Logo */}
+          <svg width="118" height="140" viewBox="-59 -58 118 136"
+            style={{ filter:'drop-shadow(0 10px 36px rgba(107,90,155,0.42))' }}>
+            <defs>
+              <linearGradient id="pg" x1="0%" y1="0%" x2="25%" y2="100%">
+                <stop offset="0%" stopColor="#9B8EC4"/>
+                <stop offset="100%" stopColor="#3D3360"/>
+              </linearGradient>
+              <clipPath id="pc">
+                <path d="M0,-50 C-35,-50 -50,-28 -50,-4 C-50,22 -20,46 0,66 C20,46 50,22 50,-4 C50,-28 35,-50 0,-50 Z"/>
+              </clipPath>
+              <radialGradient id="ps" cx="35%" cy="28%" r="55%">
+                <stop offset="0%" stopColor="rgba(255,255,255,0.2)"/>
+                <stop offset="100%" stopColor="rgba(255,255,255,0)"/>
+              </radialGradient>
+            </defs>
+            <path d="M0,-50 C-35,-50 -50,-28 -50,-4 C-50,22 -20,46 0,66 C20,46 50,22 50,-4 C50,-28 35,-50 0,-50 Z" fill="url(#pg)"/>
+            <g clipPath="url(#pc)" opacity="0.42">
+              {[[-20,-32],[4,-32],[28,-32],[-8,-12],[16,-12],[4,8],[-20,8]].map(([x,y],i)=>(
+                <polygon key={i} points={hexPoints(x,y,16)} fill="none" stroke="#C1BDD2" strokeWidth="0.8"/>
+              ))}
+            </g>
+            <path d="M0,-50 C-35,-50 -50,-28 -50,-4 C-50,22 -20,46 0,66 C20,46 50,22 50,-4 C50,-28 35,-50 0,-50 Z" fill="url(#ps)"/>
+            <circle cx="0" cy="-4" r="16" fill="rgba(11,8,20,0.58)"/>
+            <circle cx="0" cy="-4" r="6"  fill="rgba(193,189,210,0.22)"/>
+          </svg>
+
+          {/* Name */}
+          <div style={{ marginTop:34, fontFamily:"'Cinzel',serif", fontSize:26, fontWeight:600,
+            letterSpacing:'0.14em', color:'#C1BDD2', textAlign:'center' }}>
+            OBSCURO MAP
+          </div>
+          <div style={{ marginTop:10, fontFamily:"'Cinzel',serif", fontSize:10, fontWeight:400,
+            letterSpacing:'0.38em', color:'rgba(193,189,210,0.38)', textTransform:'uppercase' }}>
+            Explore the unknown
+          </div>
+        </div>
+      );
+    }
+
+    // ── Map Screen ─────────────────────────────────────────────
+    function MapScreen({ w=390, h=844, showGrid=true }) {
+      return (
+        <div style={{ width:w, height:h, position:'relative', overflow:'hidden', background:'#1A2330' }}>
+          <MapBg w={w} h={h}/>
+          <HexOverlay w={w} h={h} showGrid={showGrid}/>
+          <GooglePill/>
+          <MapControls gridActive={showGrid}/>
+        </div>
+      );
+    }
+
+    // ── Main ───────────────────────────────────────────────────
+    function App() {
+      const FW = 430, FH = 920;
+      const wrap = (child) => (
+        <div style={{ width:'100%', height:'100%', background:'#0A0810',
+          display:'flex', alignItems:'center', justifyContent:'center' }}>
+          <IOSDevice dark={true} width={402} height={874}>{child}</IOSDevice>
+        </div>
+      );
+
+      return (
+        <DesignCanvas>
+          <DCSection id="screens" title="Obscuro Map — UI Design" subtitle="Три экрана · тёмная тема · гексагональный туман войны">
+            <DCArtboard id="splash" label="Заставка" width={FW} height={FH}>
+              {wrap(<SplashScreen/>)}
+            </DCArtboard>
+            <DCArtboard id="map-on" label="Карта — сетка включена" width={FW} height={FH}>
+              {wrap(<MapScreen showGrid={true}/>)}
+            </DCArtboard>
+            <DCArtboard id="map-off" label="Карта — сетка скрыта" width={FW} height={FH}>
+              {wrap(<MapScreen showGrid={false}/>)}
+            </DCArtboard>
+          </DCSection>
+        </DesignCanvas>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
