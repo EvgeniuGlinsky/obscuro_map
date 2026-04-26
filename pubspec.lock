@@ -125,10 +125,10 @@ packages:
     dependency: transitive
     description:
       name: characters
-      sha256: faf38497bda5ead2a8c7615f4f7939df04333478bf32e4173fcb06d428b5716b
+      sha256: f71061c654a3380576a52b451dd5532377954cf9dbd272a78fc8479606670803
       url: "https://pub.dev"
     source: hosted
-    version: "1.4.1"
+    version: "1.4.0"
   checked_yaml:
     dependency: transitive
     description:
@@ -432,6 +432,14 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
+  geojson2h3:
+    dependency: transitive
+    description:
+      name: geojson2h3
+      sha256: "54305801c0bac29dc2c192dcfe30d2bd95830fa0935b695423187741bb18d300"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.7.0"
   geolocator:
     dependency: "direct main"
     description:
@@ -616,6 +624,38 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.3.2"
+  h3_common:
+    dependency: transitive
+    description:
+      name: h3_common
+      sha256: "974d33d58c49ccaaf9cb1eb0bf860a21dbe25a8708c26e00fb742ba85525a905"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.7.0"
+  h3_ffi:
+    dependency: transitive
+    description:
+      name: h3_ffi
+      sha256: e8d1b3abfb74242f71750fe909c3dd4c571f90185b3fe9fd25a776a382e878df
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.7.0"
+  h3_flutter:
+    dependency: "direct main"
+    description:
+      name: h3_flutter
+      sha256: a33492b925705854468ae09d4b7430f0e1ed68e7ac190ea6b67f3c14adf9fb39
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.7.1"
+  h3_web:
+    dependency: transitive
+    description:
+      name: h3_web
+      sha256: beeb3c07ebff03b74f3f1d2ea1494428132b076a2866c080084fc6308ee4c8f3
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.7.0"
   hashcodes:
     dependency: transitive
     description:
@@ -696,6 +736,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.0.5"
+  js:
+    dependency: transitive
+    description:
+      name: js
+      sha256: "53385261521cc4a0c4658fd0ad07a7d14591cf8fc33abbceae306ddb974888dc"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.7.2"
   json_annotation:
     dependency: transitive
     description:
@@ -748,18 +796,18 @@ packages:
     dependency: transitive
     description:
       name: matcher
-      sha256: "12956d0ad8390bbcc63ca2e1469c0619946ccb52809807067a7020d57e647aa6"
+      sha256: dc58c723c3c24bf8d3e2d3ad3f2f9d7bd9cf43ec6feaa64181775e60190153f2
       url: "https://pub.dev"
     source: hosted
-    version: "0.12.18"
+    version: "0.12.17"
   material_color_utilities:
     dependency: transitive
     description:
       name: material_color_utilities
-      sha256: "9c337007e82b1889149c82ed242ed1cb24a66044e30979c44912381e9be4c48b"
+      sha256: f7142bb1154231d7ea5f96bc7bde4bda2a0945d2806bb11670e30b850d56bdec
       url: "https://pub.dev"
     source: hosted
-    version: "0.13.0"
+    version: "0.11.1"
   meta:
     dependency: transitive
     description:
@@ -1057,10 +1105,10 @@ packages:
     dependency: transitive
     description:
       name: test_api
-      sha256: "93167629bfc610f71560ab9312acdda4959de4df6fac7492c89ff0d3886f6636"
+      sha256: ab2726c1a94d3176a45960b6234466ec367179b87dd74f1611adb1f3b5fb9d55
       url: "https://pub.dev"
     source: hosted
-    version: "0.7.9"
+    version: "0.7.7"
   time:
     dependency: transitive
     description:

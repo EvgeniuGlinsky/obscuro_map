@@ -11,29 +11,20 @@ const kInitialCameraZoom = 13.0;
 const kInitialUserZoom = 16.5;
 
 const kEraserRadiusMeters = 30.0;
-const kRevealRadiusMeters = 15.0;
-
-// Consecutive simplified points farther apart than this are from different
-// recording sessions; bridge them with moveTo rather than lineTo.
-const kSegmentGapMeters = 1000.0;
-
-// Flood-fill grid: 5 m per cell → 25 m² per cell → 20 cells max = 500 m².
-const kFillCellMeters = 5.0;
-const kFillMaxCells = 20;
-const kFillWallRadiusMeters = 15.0; // must match kRevealRadiusMeters
-const kFillBoundary = 30; // cells from seed before treating as "not enclosed"
 
 const kMetersPerDegreeLat = 110540.0;
 const kMetersPerDegreeLngEquator = 111320.0;
 
 const kEarthRadiusMeters = 6371000.0;
 
-// Maximum allowable cross-track error for RDP simplification. Must stay below
-// the painter's reveal radius so removing a point never creates a fog gap.
-const kRdpEpsilonMeters = 5.0;
-
 // OS-level pre-filter: drop GPS updates closer than this to the previous one.
-const kLocationDistanceFilterMeters = 2;
+// At storage resolution (H3 res 11, ~25 m edge) we want a sample density
+// fine enough that consecutive fixes rarely skip more than one cell — but
+// the use case interpolates via h3.cellsAlongPath when they do, so this is
+// a quality-of-data filter rather than a correctness one.
+const kLocationDistanceFilterMeters = 5;
 
-// Haversine guard before persisting: ignore movements smaller than this.
-const kMinMovementMeters = 2.5;
+// Subtle hex-grid outline colour applied to revealed cells. Alpha kept low
+// so the cleared map remains the dominant visual.
+const kHexOutlineOpacity = 0.18;
+const kHexOutlineWidth = 0.6;

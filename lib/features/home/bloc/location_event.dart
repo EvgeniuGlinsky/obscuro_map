@@ -1,5 +1,7 @@
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
+import '../../../core/hex/hex_index.dart';
+
 sealed class LocationEvent {
   const LocationEvent();
 }
@@ -8,23 +10,26 @@ final class LocationStarted extends LocationEvent {
   const LocationStarted();
 }
 
-/// Removes every tracked point within [radiusMeters] of [center].
-/// Does not persist; dispatch [LocationProgressSaved] when the gesture ends.
-final class LocationPointsErased extends LocationEvent {
-  const LocationPointsErased({required this.center, required this.radiusMeters});
+/// Removes every explored cell whose centroid lies within [radiusMeters] of
+/// [center]. Persists immediately — the gesture-end debounce only matters
+/// for cloud mirroring, which is dispatched via [LocationProgressSaved].
+final class LocationCellsErased extends LocationEvent {
+  const LocationCellsErased({required this.center, required this.radiusMeters});
   final LatLng center;
   final double radiusMeters;
 }
 
-/// Persists the current in-memory point list to storage.
+/// Persists current state and pushes it to the cloud. Fired on gesture end
+/// to debounce cloud writes during continuous erase strokes.
 final class LocationProgressSaved extends LocationEvent {
   const LocationProgressSaved();
 }
 
-/// Adds a set of virtual fill points that reveal an enclosed fog region.
-final class LocationAreaFilled extends LocationEvent {
-  const LocationAreaFilled({required this.fillPoints});
-  final List<LatLng> fillPoints;
+/// Adds a batch of cells (e.g. produced by the flood-fill use case) to the
+/// explored set. Idempotent — already-explored cells are no-ops.
+final class LocationCellsAdded extends LocationEvent {
+  const LocationCellsAdded(this.cells);
+  final Iterable<HexIndex> cells;
 }
 
 /// Internal: fires when the auth state changes. [uid] is `null` while

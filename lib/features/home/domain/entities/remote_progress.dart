@@ -1,14 +1,10 @@
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import '../../../../core/hex/hex_index.dart';
 
 /// Snapshot of a user's progress as stored in Firestore.
 class RemoteProgress {
-  const RemoteProgress({
-    required this.points,
-    required this.fillPoints,
-  });
+  const RemoteProgress({required this.cells});
 
-  final List<LatLng> points;
-  final List<LatLng> fillPoints;
+  final Set<HexIndex> cells;
 
-  bool get isEmpty => points.isEmpty && fillPoints.isEmpty;
+  bool get isEmpty => cells.isEmpty;
 }

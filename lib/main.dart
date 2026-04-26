@@ -3,10 +3,13 @@ import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'core/di/get_it.dart';
 import 'core/firebase/firebase_options.dart';
 import 'core/navigation/app_router.dart';
 import 'core/theme/dark_theme.dart';
+import 'features/home/data/progress_migration.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,6 +23,12 @@ Future<void> main() async {
   }
 
   await configureDependencies();
+
+  // One-shot v1 → v2 schema migration. No-ops once the legacy keys are
+  // gone, so it's safe to run on every launch.
+  await getIt<ProgressMigration>().migrateLocalIfNeeded(
+    getIt<SharedPreferences>(),
+  );
 
   runApp(const _App());
 }

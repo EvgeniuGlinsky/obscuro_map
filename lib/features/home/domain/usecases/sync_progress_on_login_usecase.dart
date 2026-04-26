@@ -1,6 +1,6 @@
-import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:injectable/injectable.dart';
 
+import '../../../../core/hex/hex_index.dart';
 import '../repositories/i_progress_repository.dart';
 import '../repositories/i_remote_progress_repository.dart';
 
@@ -16,14 +16,10 @@ final class SyncUploadedLocal extends SyncProgressResult {
 }
 
 /// Cloud already had data — local was overwritten. The caller must replace
-/// its in-memory state with [points] / [fillPoints].
+/// its in-memory state with [cells].
 final class SyncDownloadedRemote extends SyncProgressResult {
-  const SyncDownloadedRemote({
-    required this.points,
-    required this.fillPoints,
-  });
-  final List<LatLng> points;
-  final List<LatLng> fillPoints;
+  const SyncDownloadedRemote(this.cells);
+  final Set<HexIndex> cells;
 }
 
 /// Resolves "first-time login vs returning login" for a freshly authenticated
@@ -40,21 +36,12 @@ class SyncProgressOnLoginUseCase {
     if (remote == null || remote.isEmpty) {
       // Cloud has nothing — push the user's local progress up so subsequent
       // logins on other devices can pull it back.
-      await _remote.save(
-        uid,
-        points: _local.load(),
-        fillPoints: _local.loadFill(),
-      );
+      await _remote.save(uid, cells: _local.load());
       return const SyncUploadedLocal();
     }
     // Cloud wins: overwrite local copies and tell the caller to replace its
     // in-memory state.
-    await _local.save(remote.points);
-    await _local.saveFill(remote.fillPoints);
-    return SyncDownloadedRemote(
-      points: remote.points,
-      fillPoints: remote.fillPoints,
-    );
+    await _local.save(remote.cells);
+    return SyncDownloadedRemote(remote.cells);
   }
 }
-

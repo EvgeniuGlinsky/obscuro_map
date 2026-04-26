@@ -1,18 +1,19 @@
-import 'dart:math';
-import 'dart:typed_data';
-
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:injectable/injectable.dart';
 
-import '../../../../core/constants/map_constants.dart';
+import '../../../../core/hex/h3_service.dart';
+import '../../../../core/hex/hex_index.dart';
+
+const int _kFillMaxCells = 4096;
+const int _kFillBoundaryK = 64; // grid-distance from seed before "not enclosed"
 
 sealed class FillResult {
   const FillResult();
 }
 
 final class FillSuccess extends FillResult {
-  const FillSuccess(this.points);
-  final List<LatLng> points;
+  const FillSuccess(this.cells);
+  final List<HexIndex> cells;
 }
 
 final class FillNotEnclosed extends FillResult {
@@ -23,78 +24,41 @@ final class FillTooLarge extends FillResult {
   const FillTooLarge();
 }
 
-/// Decides whether a tap is inside an area enclosed by the user's track and,
-/// if so, materialises the enclosed region as a list of virtual fill points.
-///
-/// Pure domain rule: the painter and erase/fill UI both treat track points as
-/// "walls" of revealed fog; this use-case BFS-floods cells from the seed and
-/// reports one of three outcomes:
-///   * [FillSuccess] — enclosed; returns one LatLng per visited grid cell.
-///   * [FillNotEnclosed] — flood reached the search boundary.
-///   * [FillTooLarge] — visited cells exceeded the [kFillMaxCells] budget.
+/// Floods outward from the seed cell using H3 neighbour traversal, treating
+/// already-visited cells as walls. Reports:
+///   * [FillSuccess] — the seed is enclosed; lists every newly-flooded cell.
+///   * [FillNotEnclosed] — the flood reached the [_kFillBoundaryK] ring or
+///     the seed is itself already visited.
+///   * [FillTooLarge] — visited cells exceeded [_kFillMaxCells].
 @lazySingleton
 class ComputeFillAreaUseCase {
-  const ComputeFillAreaUseCase();
+  const ComputeFillAreaUseCase(this._h3);
 
-  FillResult call(LatLng seed, List<LatLng> trackPoints) {
-    // Equirectangular approximation — accurate to <0.1 % within 100 km.
-    final lngM = kMetersPerDegreeLngEquator * cos(seed.latitude * pi / 180.0);
+  final H3Service _h3;
 
-    final tpx = Float64List(trackPoints.length);
-    final tpy = Float64List(trackPoints.length);
-    for (var k = 0; k < trackPoints.length; k++) {
-      tpx[k] = (trackPoints[k].longitude - seed.longitude) * lngM;
-      tpy[k] = (trackPoints[k].latitude - seed.latitude) * kMetersPerDegreeLat;
-    }
+  FillResult call(LatLng seed, Set<HexIndex> walls) {
+    final seedCell = _h3.latLngToCell(seed, kHexStorageResolution);
+    if (walls.contains(seedCell)) return const FillNotEnclosed();
 
-    const wallCells = kFillWallRadiusMeters ~/ kFillCellMeters + 1;
-    const wallR2 = kFillWallRadiusMeters * kFillWallRadiusMeters;
-    final walls = <(int, int)>{};
-    for (var k = 0; k < trackPoints.length; k++) {
-      final ci = (tpx[k] / kFillCellMeters).round();
-      final cj = (tpy[k] / kFillCellMeters).round();
-      if (ci.abs() > kFillBoundary + wallCells ||
-          cj.abs() > kFillBoundary + wallCells) {
-        continue;
-      }
-      for (var di = -wallCells; di <= wallCells; di++) {
-        for (var dj = -wallCells; dj <= wallCells; dj++) {
-          final dx = (ci + di) * kFillCellMeters - tpx[k];
-          final dy = (cj + dj) * kFillCellMeters - tpy[k];
-          if (dx * dx + dy * dy <= wallR2) walls.add((ci + di, cj + dj));
-        }
-      }
-    }
+    // Bounded BFS using H3 k-rings as the neighbour primitive.
+    final visited = <HexIndex>{seedCell};
+    final queue = <HexIndex>[seedCell];
+    final boundary = _h3.diskAroundCell(seedCell, _kFillBoundaryK).toSet();
 
-    if (walls.contains((0, 0))) return const FillNotEnclosed();
-
-    final visited = <(int, int)>{};
-    final queue = <(int, int)>[(0, 0)];
     var head = 0;
-
     while (head < queue.length) {
-      final cell = queue[head++];
-      final (i, j) = cell;
-      if (!visited.add(cell)) continue;
+      if (visited.length > _kFillMaxCells) return const FillTooLarge();
 
-      if (i.abs() >= kFillBoundary || j.abs() >= kFillBoundary) {
-        return const FillNotEnclosed();
-      }
-
-      if (visited.length > kFillMaxCells) return const FillTooLarge();
-
-      for (final n in [(i - 1, j), (i + 1, j), (i, j - 1), (i, j + 1)]) {
-        if (!visited.contains(n) && !walls.contains(n)) queue.add(n);
+      final cur = queue[head++];
+      // 1-ring of `cur` minus `cur` itself = its 6 (or 5 at pentagons)
+      // neighbours.
+      for (final n in _h3.diskAroundCell(cur, 1)) {
+        if (n == cur) continue;
+        if (!boundary.contains(n)) return const FillNotEnclosed();
+        if (walls.contains(n)) continue;
+        if (visited.add(n)) queue.add(n);
       }
     }
-
-    final pts = <LatLng>[];
-    for (final (i, j) in visited) {
-      pts.add(LatLng(
-        seed.latitude + j * kFillCellMeters / kMetersPerDegreeLat,
-        seed.longitude + i * kFillCellMeters / lngM,
-      ));
-    }
-    return FillSuccess(pts);
+    return FillSuccess(visited.toList(growable: false));
   }
 }

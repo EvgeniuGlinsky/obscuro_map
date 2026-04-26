@@ -1,60 +1,54 @@
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:injectable/injectable.dart';
 
-import '../../../../core/constants/map_constants.dart';
-import '../geo/geo_math.dart';
+import '../../../../core/hex/h3_service.dart';
+import '../../../../core/hex/hex_index.dart';
 
-/// Decides whether a new GPS fix should extend the recorded track and, if so,
-/// returns the simplified next track. Encapsulates two domain rules:
+/// Result of feeding a GPS fix into the visited-cell set.
+class VisitedCellsUpdate {
+  const VisitedCellsUpdate({required this.added, required this.currentCell});
+
+  /// Cells that became newly visited because of this fix. Empty when the
+  /// user hasn't crossed a cell boundary.
+  final List<HexIndex> added;
+
+  /// The cell the user is currently in. Stored on the bloc so the next fix
+  /// can fill any gaps along a fast-moving path.
+  final HexIndex currentCell;
+}
+
+/// Translates a single GPS fix into the cells it traversed since the last
+/// fix.
 ///
-///  1. Min-movement guard — drop fixes closer than [kMinMovementMeters] to the
-///     previous point so GPS jitter doesn't pollute the track.
-///  2. Ramer–Douglas–Peucker simplification — keep the smallest subset of
-///     points whose polyline stays within [kRdpEpsilonMeters] of the original.
+/// When two consecutive fixes land in adjacent cells, only the new cell
+/// is added. When a fast mover (vehicle, etc.) skips intermediate cells,
+/// `cellsAlongPath` interpolates so the fog reveal stays continuous.
 @lazySingleton
 class AppendTrackPointUseCase {
-  const AppendTrackPointUseCase();
+  const AppendTrackPointUseCase(this._h3);
 
-  /// Returns the simplified next track, or `null` if [incoming] should be
-  /// ignored as below the movement threshold.
-  List<LatLng>? call(List<LatLng> current, LatLng incoming) {
-    if (current.isNotEmpty &&
-        haversineMeters(current.last, incoming) < kMinMovementMeters) {
-      return null;
-    }
-    return _simplify([...current, incoming]);
-  }
+  final H3Service _h3;
 
-  /// Iterative RDP. The stack avoids recursion limits on very long tracks.
-  static List<LatLng> _simplify(List<LatLng> pts) {
-    if (pts.length < 3) return pts;
+  VisitedCellsUpdate call({
+    required LatLng position,
+    required HexIndex? previousCell,
+    required Set<HexIndex> visited,
+  }) {
+    final cell = _h3.latLngToCell(position, kHexStorageResolution);
 
-    final keep = List<bool>.filled(pts.length, false);
-    keep[0] = true;
-    keep[pts.length - 1] = true;
-
-    final stack = <(int, int)>[(0, pts.length - 1)];
-    while (stack.isNotEmpty) {
-      final (start, end) = stack.removeLast();
-      if (end - start < 2) continue;
-
-      var maxDist = 0.0;
-      var maxIdx = start + 1;
-      for (var i = start + 1; i < end; i++) {
-        final d = crossTrackMeters(pts[i], pts[start], pts[end]);
-        if (d > maxDist) {
-          maxDist = d;
-          maxIdx = i;
-        }
-      }
-
-      if (maxDist >= kRdpEpsilonMeters) {
-        keep[maxIdx] = true;
-        stack.add((start, maxIdx));
-        stack.add((maxIdx, end));
-      }
+    if (cell == previousCell) {
+      // Still in the same cell — no work.
+      return VisitedCellsUpdate(added: const [], currentCell: cell);
     }
 
-    return [for (var i = 0; i < pts.length; i++) if (keep[i]) pts[i]];
+    final added = <HexIndex>[];
+    if (previousCell == null) {
+      if (visited.add(cell)) added.add(cell);
+    } else {
+      for (final c in _h3.cellsAlongPath(previousCell, cell)) {
+        if (visited.add(c)) added.add(c);
+      }
+    }
+    return VisitedCellsUpdate(added: added, currentCell: cell);
   }
 }

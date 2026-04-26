@@ -19,6 +19,7 @@ import '../../features/auth/domain/repositories/i_auth_repository.dart'
     as _i589;
 import '../../features/home/bloc/location_bloc.dart' as _i678;
 import '../../features/home/data/firestore_progress_repository.dart' as _i776;
+import '../../features/home/data/progress_migration.dart' as _i930;
 import '../../features/home/data/progress_repository.dart' as _i977;
 import '../../features/home/domain/repositories/i_progress_repository.dart'
     as _i1021;
@@ -31,6 +32,7 @@ import '../../features/home/domain/usecases/compute_fill_area_usecase.dart'
 import '../../features/home/domain/usecases/erase_points_usecase.dart' as _i752;
 import '../../features/home/domain/usecases/sync_progress_on_login_usecase.dart'
     as _i528;
+import '../hex/h3_service.dart' as _i65;
 import 'app_module.dart' as _i460;
 
 extension GetItInjectableX on _i174.GetIt {
@@ -45,18 +47,22 @@ extension GetItInjectableX on _i174.GetIt {
       () => appModule.sharedPreferences,
       preResolve: true,
     );
+    gh.lazySingleton<_i65.H3Service>(() => _i65.H3Service());
+    gh.singleton<_i589.IAuthRepository>(() => _i588.FirebaseAuthRepository());
+    gh.lazySingleton<_i930.ProgressMigration>(
+      () => _i930.ProgressMigration(gh<_i65.H3Service>()),
+    );
     gh.lazySingleton<_i245.AppendTrackPointUseCase>(
-      () => const _i245.AppendTrackPointUseCase(),
+      () => _i245.AppendTrackPointUseCase(gh<_i65.H3Service>()),
     );
     gh.lazySingleton<_i408.ComputeFillAreaUseCase>(
-      () => const _i408.ComputeFillAreaUseCase(),
+      () => _i408.ComputeFillAreaUseCase(gh<_i65.H3Service>()),
     );
     gh.lazySingleton<_i752.ErasePointsUseCase>(
-      () => const _i752.ErasePointsUseCase(),
+      () => _i752.ErasePointsUseCase(gh<_i65.H3Service>()),
     );
-    gh.singleton<_i589.IAuthRepository>(() => _i588.FirebaseAuthRepository());
     gh.singleton<_i1039.IRemoteProgressRepository>(
-      () => _i776.FirestoreProgressRepository(),
+      () => _i776.FirestoreProgressRepository(gh<_i65.H3Service>()),
     );
     gh.singleton<_i1021.IProgressRepository>(
       () => _i977.ProgressRepository(gh<_i460.SharedPreferences>()),

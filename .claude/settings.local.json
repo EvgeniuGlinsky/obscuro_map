@@ -18,7 +18,8 @@
       "mcp__ide__getDiagnostics",
       "Bash(rm \"C:/workspace/lib/features/splash/ui/splash_view.dart\")",
       "Bash(rmdir \"C:/workspace/lib/features/splash/ui\")",
-      "Bash(rmdir \"C:/workspace/lib/features/splash\")"
+      "Bash(rmdir \"C:/workspace/lib/features/splash\")",
+      "Bash(xargs grep *)"
     ]
   }
 }

@@ -1,8 +1,10 @@
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import '../../../../core/hex/hex_index.dart';
 
 abstract interface class IProgressRepository {
-  List<LatLng> load();
-  Future<void> save(List<LatLng> points);
-  List<LatLng> loadFill();
-  Future<void> saveFill(List<LatLng> fillPoints);
+  /// Returns every explored cell at [kHexStorageResolution]. Empty on first
+  /// launch.
+  Set<HexIndex> load();
+
+  /// Replaces the persisted set with [cells].
+  Future<void> save(Set<HexIndex> cells);
 }
